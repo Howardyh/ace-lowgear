@@ -1,0 +1,28 @@
+{
+  "Name": "ACE LowGear",
+  "Version": "0.1.0",
+  "Files": [
+    ".gitattributes",
+    ".gitignore",
+    ".github/workflows/check.yml",
+    "ACE-LowGear.ps1",
+    "Apply.cmd",
+    "Check.cmd",
+    "Restore.cmd",
+    "SelfTest.cmd",
+    "Last-CPU.cmd",
+    "src/LowGear.Core.psm1",
+    "tools/Test-Project.ps1",
+    "tools/Test-PublicContent.ps1",
+    "tools/Package.ps1",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "docs/DESIGN.md",
+    "docs/PRIVACY.md",
+    "docs/TESTING.md",
+    "docs/RELEASING.md",
+    "public-files.json"
+  ]
+}
