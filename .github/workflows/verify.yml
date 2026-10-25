@@ -1,0 +1,27 @@
+name: Verify source
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Check public content
+        run: .\tools\Validate-Public.ps1 -Index
+      - name: Test isolated state and native runtime
+        run: .\tests\Run.ps1 -StartupProbe
+      - name: Test real isolated process-start events
+        run: .\tests\Event.ps1
+      - name: Verify source package
+        run: .\tools\Package.ps1
