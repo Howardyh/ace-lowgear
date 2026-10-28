@@ -1,6 +1,6 @@
 {
   "Name": "ACE LowGear",
-  "Version": "1.0.0",
+  "Version": "1.1.0",
   "Files": [
     ".gitattributes",
     ".gitignore",
@@ -19,11 +19,14 @@
     "src/State.ps1",
     "src/Platform.ps1",
     "src/Controller.ps1",
+    "src/Health.ps1",
     "src/Runtime.cs",
     "ui/Panel.xaml",
     "ui/Panel.ps1",
     "tests/Run.ps1",
     "tests/Event.ps1",
+    "tests/Upgrade.ps1",
+    "tests/Panel.ps1",
     "tools/Validate-Public.ps1",
     "tools/Package.ps1",
     "README.md",

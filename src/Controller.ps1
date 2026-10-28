@@ -31,13 +31,14 @@ function Set-LGPolicy {
     Write-LGJson (Join-Path $script:Data 'policy.json') ([pscustomobject]@{Schema=1;BindLastCpu=$Last;IntervalSeconds=3})
 }
 function Install-LG {
-    param([bool]$Last)
+    param([Nullable[bool]]$Last)
     $existing=Read-LGActive
     if($null -ne $existing){
+        if($existing.Manifest.Version -cne $script:Version){[void](Upgrade-LG);$existing=Read-LGActive}
         if($existing.Manifest.Phase -notin @('Active','Paused')){throw '发现未完成的事务，请使用完整恢复。'}
         $states=@($script:Images | ForEach-Object {Get-LGImage $_})
         if(@($states | Where-Object {-not(Test-LGConfigured $_)}).Count -gt 0){throw '启动值发生后续修改，请先检查。'}
-        Set-LGPolicy $Last
+        if($null -ne $Last){Set-LGPolicy ([bool]$Last)}
         Resume-LG
         return '已启用；原始备份保持不变。'
     }
@@ -46,7 +47,8 @@ function Install-LG {
     $previousTask=Get-LGTaskSnapshot
     if($previousTask.Exists){throw '任务存在但没有本机恢复记录，拒绝覆盖。'}
     $baseline=Get-LGBaseline
-    Set-LGPolicy $Last
+    Set-LGPolicy ([bool]$Last)
+    Write-LGProgress '正在验证本机启动行为…'
     $probe=Test-LGStartup
     $current=@($script:Images | ForEach-Object {Get-LGImage $_})
     if(($baseline.Before | ConvertTo-Json -Depth 15 -Compress) -cne ($current | ConvertTo-Json -Depth 15 -Compress)){throw '自检期间设置发生变化，已停止。'}
@@ -54,6 +56,7 @@ function Install-LG {
     $runtimeDirectory=Join-Path $script:Data $runtimeFolder
     [void][IO.Directory]::CreateDirectory($runtimeDirectory)
     $exe=Join-Path $runtimeDirectory 'LowGear.Worker.exe'
+    Write-LGProgress '正在本地编译执行组件…'
     Build-LGRuntime $exe
     $backupName='original-'+[Guid]::NewGuid().ToString('N')+'.json'
     $backupPath=Join-Path (Join-Path $script:Data 'backups') $backupName
@@ -70,7 +73,9 @@ function Install-LG {
         if($baseline.LegacyTask.Exists){Remove-LGTask 'ACE-LowGear-PriorityGuard' 'ACE LowGear Priority Guard v1'}
         foreach($image in $script:Images){Set-LGImage $image}
         if(@($script:Images | ForEach-Object {Get-LGImage $_} | Where-Object {-not(Test-LGConfigured $_)}).Count -gt 0){throw '启动规则写入后核验失败。'}
+        Write-LGProgress '正在配置启动事件与一次性任务…'
         Register-LGTask $exe
+        Write-LGProgress '正在确认本次执行已启动…'
         Wait-LGWorker
         $manifest.Phase='Active'
         Write-LGJson $activePath $manifest
@@ -106,13 +111,22 @@ function Pause-LG {
 function Resume-LG {
     $state=Read-LGActive
     if($null -eq $state -or $state.Manifest.Phase -notin @('Paused','Active')){throw '请先启用自动管理，或恢复未完成的事务。'}
-    $exe=Join-Path (Join-Path $script:Data $state.Manifest.Runtime) 'LowGear.Worker.exe'
-    if((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -cne $state.Manifest.RuntimeHash){throw '后台程序完整性核验失败。'}
-    $task=Get-LGTask
-    if($null -eq $task){Register-LGTask $exe}else{[void](Get-LGTaskSnapshot);Register-LGAutomation;$task.Enabled=$true;[void]$task.Run($null)}
-    Wait-LGWorker
-    $state.Manifest.Phase='Active'
-    Write-LGJson (Join-Path $script:Data 'active.json') $state.Manifest
+    if($state.Manifest.Version -cne $script:Version){[void](Upgrade-LG);$state=Read-LGActive}
+    Assert-LGManaged $state -AllowMissing
+    $snapshot=Get-LGDeploymentSnapshot $state
+    $pending=Save-LGDeploymentJournal $state $snapshot
+    try{
+        $task=Get-LGTask
+        if($null -eq $task){Register-LGTask (Get-LGRuntimePath $state)}else{Register-LGAutomation;$task.Enabled=$true;Start-LGTaskSession $task}
+        Write-LGProgress '正在确认本次执行已启动…'
+        Wait-LGWorker
+        $state.Manifest.Phase='Active'
+        Write-LGJson (Join-Path $script:Data 'active.json') $state.Manifest
+    }catch{
+        $failure=$_
+        try{Restore-LGDeployment $snapshot}catch{$pending.Phase='RecoveryRequired';Write-LGJson (Join-Path $script:Data 'active.json') $pending;Throw-LGError 'RESUME_ROLLBACK_PENDING' '恢复自动执行尚未完成，请使用手动修复。'}
+        throw $failure
+    }
     '启动事件触发已恢复；本次执行完成后程序会退出。'
 }
 function Restore-LG {
@@ -129,35 +143,6 @@ function Restore-LG {
     [IO.File]::Move((Join-Path $script:Data 'active.json'),(Join-Path (Join-Path $script:Data 'backups') ('restored-'+[Guid]::NewGuid().ToString('N')+'.json')))
     '已移除后台并恢复最初的启动值；备份保留。当前进程在正常重启后使用原设置。'
 }
-function Get-LGStatus {
-    Initialize-LGNative
-    $state=Read-LGActive
-    $policy=[pscustomobject]@{BindLastCpu=$false;IntervalSeconds=3}
-    if($null -ne $state){$policy=Read-LGJson (Join-Path $script:Data 'policy.json')}
-    $task=Get-LGTask
-    $beat=$null
-    if(Test-Path -LiteralPath (Join-Path $script:Data 'last-run.json')){$beat=Read-LGJson (Join-Path $script:Data 'last-run.json')}
-    $fresh=$false
-    if($null -ne $beat){$fresh=([DateTime]::UtcNow-[DateTime]::Parse($beat.TimestampUtc).ToUniversalTime()).TotalSeconds -lt 45}
-    $running=$null -ne $task -and $task.State -eq 4
-    $automation=Get-LGAutomation
-    $registry=@($script:Images | ForEach-Object { $s=Get-LGImage $_; [pscustomobject]@{Image=$_;Configured=(Test-LGConfigured $s)} })
-    $processes=@([LowGear.Runtime]::Scan($false,[bool]$policy.BindLastCpu,$null))
-    $installed=$null -ne $state
-    $mode=if(-not $installed){'NotInstalled'}elseif($state.Manifest.Phase -eq 'Paused'){'Paused'}elseif($state.Manifest.Phase -ne 'Active'){'RecoveryRequired'}elseif($null -eq $task -or -not $task.Enabled -or -not $automation.Ready){'WorkerUnavailable'}elseif($running){'Running'}else{'Ready'}
-    $runtimeGood=$false
-    if($installed){
-        $exe=Join-Path (Join-Path $script:Data $state.Manifest.Runtime) 'LowGear.Worker.exe'
-        $runtimeGood=(Test-Path -LiteralPath $exe) -and (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ceq $state.Manifest.RuntimeHash
-        if(-not $runtimeGood){$mode='RecoveryRequired'}
-    }
-    [pscustomobject]@{
-        Product='ACE LowGear';Version=$script:Version;Mode=$mode;TimestampUtc=[DateTime]::UtcNow.ToString('o')
-        Installed=$installed;SessionRunning=$running;AutomaticRegistered=$automation.Ready;SessionRecent=$fresh;RuntimeIntegrity=$runtimeGood
-        BindLastCpu=[bool]$policy.BindLastCpu;Topology=[LowGear.Runtime]::GetTopology()
-        Startup=$registry;Processes=$processes;LastSession=$beat
-    }
-}
 function Get-LGSummary {
     param($Report)
     $running=@($Report.Processes | Where-Object Running)
@@ -167,17 +152,21 @@ function Get-LGSummary {
     '存在未达标或无法读取的实例，请查看各项状态和原因。'
 }
 function Invoke-LGCommand {
-    param([ValidateSet('Install','Status','ApplyOnce','LastCpu','Pause','Resume','Restore','SelfTest','SetAffinity')][string]$Command='Status',[bool]$Last=$false)
+    param([ValidateSet('Install','Status','ApplyOnce','LastCpu','Pause','Resume','Restore','SelfTest','SetAffinity','Upgrade','Repair','Diagnose')][string]$Command='Status',[Nullable[bool]]$Last=$null,[string]$ProgressPath)
     Initialize-LGNative
+    $script:ProgressPath=$ProgressPath
+    Write-LGProgress '正在检查本机状态…'
     $lock=$null
     try {
-        if($Command -ne 'Status'){
+        if($Command -notin @('Status','Diagnose')){
             Initialize-LGData
             $lock=[IO.File]::Open((Join-Path $script:Common 'operation.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
         }
         $message='检查完成。';$detail=$null
         switch($Command){
             'Install' {$message=Install-LG $Last}
+            'Upgrade' {$message=Upgrade-LG}
+            'Repair' {$message=Repair-LG}
             'Pause' {$message=Pause-LG}
             'Resume' {$message=Resume-LG}
             'Restore' {$message=Restore-LG}
@@ -189,13 +178,117 @@ function Invoke-LGCommand {
             'SetAffinity' {
                 $state=Read-LGActive
                 if($null -eq $state -or $state.Manifest.Phase -notin @('Active','Paused')){throw '请先完成自动管理安装或恢复未完成的事务。'}
-                Set-LGPolicy $Last
+                Set-LGPolicy ([bool]$Last)
                 $message=if($Last){'已启用每次启动时绑定最后 CPU。'}else{'已停止启动时绑定；已有进程的相关性保持到正常重启。'}
             }
             'SelfTest' {$detail=Test-LGStartup;$message='本机启动规则自检通过，临时进程和测试键已清理。'}
         }
+        Write-LGProgress '正在回读最终状态…'
         $report=Get-LGStatus
+        if($Command -eq 'Diagnose'){return Get-LGDiagnostic $report}
         [pscustomobject]@{Success=$true;Message=$message;Detail=$detail;Report=$report}
     }
-    finally{if($null -ne $lock){$lock.Dispose()}}
+    finally{if($null -ne $lock){$lock.Dispose()};$script:ProgressPath=$null}
+}
+
+function Get-LGDeploymentSnapshot {
+    param($State)
+    $automation=Get-LGAutomation
+    [pscustomobject]@{Schema=1;Machine=(Get-LGToken);Manifest=($State.Manifest|ConvertTo-Json -Depth 15|ConvertFrom-Json)
+        Policy=(Read-LGJson (Join-Path $script:Data 'policy.json'));Task=(Get-LGTaskSnapshot)
+        FilterExists=($null -ne $automation.Filter);ConsumerExists=($null -ne $automation.Consumer);EventReady=$automation.Ready}
+}
+function Restore-LGDeployment {
+    param($Snapshot)
+    if($Snapshot.Schema -ne 1 -or $Snapshot.Machine -cne (Get-LGToken)){Throw-LGError 'JOURNAL_INVALID' '升级恢复记录不属于本机。'}
+    $previous=$Snapshot.Manifest
+    if($previous.Version -cnotmatch '^1\.\d+\.\d+$' -or $previous.Runtime -cnotmatch ('^app-'+[regex]::Escape($previous.Version)+'-[a-f0-9]{32}$') -or $previous.Phase -notin @('Active','Paused')){Throw-LGError 'JOURNAL_INVALID' '升级恢复记录内容无效。'}
+    Remove-LGAutomation
+    Remove-LGTask
+    Write-LGJson (Join-Path $script:Data 'policy.json') $Snapshot.Policy
+    Write-LGJson (Join-Path $script:Data 'active.json') $previous
+    Restore-LGTask $Snapshot.Task
+    if($Snapshot.FilterExists -or $Snapshot.ConsumerExists){
+        Register-LGAutomation
+        $restored=Get-LGAutomation
+        if(-not $Snapshot.EventReady){foreach($binding in $restored.Bindings){$binding.Delete()|Out-Null}}
+        if(-not $Snapshot.ConsumerExists){$restored.Consumer.Delete()|Out-Null}
+        if(-not $Snapshot.FilterExists){$restored.Filter.Delete()|Out-Null}
+    }
+}
+function Save-LGDeploymentJournal {
+    param($State,$Snapshot)
+    $name='deployment-'+[Guid]::NewGuid().ToString('N')+'.json'
+    $path=Join-Path (Join-Path $script:Data 'backups') $name
+    Write-LGJson $path $Snapshot
+    $pending=$State.Manifest|ConvertTo-Json -Depth 15|ConvertFrom-Json
+    $pending.Phase='Upgrading'
+    $pending|Add-Member -NotePropertyName Journal -NotePropertyValue $name -Force
+    $pending|Add-Member -NotePropertyName JournalHash -NotePropertyValue (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -Force
+    Write-LGJson (Join-Path $script:Data 'active.json') $pending
+    $pending
+}
+function Recover-LGDeployment {
+    param($State)
+    $name=Get-LGProperty $State.Manifest 'Journal' ''
+    if($name -cnotmatch '^deployment-[a-f0-9]{32}\.json$'){Throw-LGError 'JOURNAL_MISSING' '未找到可核验的升级恢复记录，请使用完整恢复。'}
+    $path=Join-Path (Join-Path $script:Data 'backups') $name
+    if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -cne $State.Manifest.JournalHash){Throw-LGError 'JOURNAL_INVALID' '升级恢复记录完整性失败。'}
+    $snapshot=Read-LGJson $path
+    if($snapshot.Manifest.Backup -cne $State.Manifest.Backup -or $snapshot.Manifest.BackupHash -cne $State.Manifest.BackupHash){Throw-LGError 'JOURNAL_INVALID' '升级恢复记录与原始备份不一致。'}
+    $previous=[pscustomobject]@{Manifest=$snapshot.Manifest}
+    $exe=Get-LGRuntimePath $previous
+    if(-not(Test-Path -LiteralPath $exe) -or (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -cne $snapshot.Manifest.RuntimeHash){Throw-LGError 'ROLLBACK_RUNTIME_INVALID' '旧执行组件无法核验，请使用完整恢复。'}
+    Restore-LGDeployment $snapshot
+    '已撤回未完成的升级并恢复先前状态；可重新尝试升级。'
+}
+function Upgrade-LG {
+    $state=Read-LGActive
+    if($null -eq $state){Throw-LGError 'NOT_INSTALLED' '尚未安装，请先启用自动管理。'}
+    if($state.Manifest.Phase -notin @('Active','Paused')){Throw-LGError 'TRANSACTION_PENDING' '发现未完成的事务，请先点击修复自动执行。'}
+    Assert-LGManaged $state -AllowMissing
+    if([version]$state.Manifest.Version -gt [version]$script:Version){Throw-LGError 'DOWNGRADE_BLOCKED' '本机版本较新，请使用对应版本的入口。'}
+    if($state.Manifest.Version -ceq $script:Version){return '本机执行组件已是当前版本，无需重复部署。'}
+    $folder='app-'+$script:Version+'-'+[Guid]::NewGuid().ToString('N');$directory=Join-Path $script:Data $folder
+    [void][IO.Directory]::CreateDirectory($directory);$exe=Join-Path $directory 'LowGear.Worker.exe'
+    Write-LGProgress '正在本地编译执行组件…'
+    Build-LGRuntime $exe
+    [void](Test-LGStartup)
+    Assert-LGManaged $state -AllowMissing
+    $snapshot=Get-LGDeploymentSnapshot $state
+    $pending=Save-LGDeploymentJournal $state $snapshot
+    try{
+        Remove-LGAutomation;Remove-LGTask
+        $next=$state.Manifest|ConvertTo-Json -Depth 15|ConvertFrom-Json
+        $next.Version=$script:Version;$next.Runtime=$folder;$next.RuntimeHash=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+        Write-LGProgress '正在配置启动事件与一次性任务…'
+        Register-LGTask $exe -Enabled:($next.Phase -eq 'Active')
+        if($next.Phase -eq 'Active'){Wait-LGWorker}
+        Write-LGJson (Join-Path $script:Data 'active.json') $next
+    }catch{
+        $failure=$_
+        try{Restore-LGDeployment $snapshot}catch{$pending.Phase='RecoveryRequired';Write-LGJson (Join-Path $script:Data 'active.json') $pending;Throw-LGError 'UPGRADE_ROLLBACK_PENDING' '升级未完成，请使用修复自动执行撤回升级。'}
+        throw $failure
+    }
+    '本机执行组件已升级；最早备份、相关性选项及启用/暂停状态均已保留。'
+}
+function Repair-LG {
+    $state=Read-LGActive
+    if($null -eq $state){Throw-LGError 'NOT_INSTALLED' '尚未安装，请先启用自动管理。'}
+    if($state.Manifest.Phase -in @('Upgrading','RecoveryRequired')){return Recover-LGDeployment $state}
+    Assert-LGManaged $state -AllowMissing
+    if($state.Manifest.Version -cne $script:Version){Throw-LGError 'UPGRADE_REQUIRED' '请先升级本机执行组件。'}
+    $snapshot=Get-LGDeploymentSnapshot $state
+    $pending=Save-LGDeploymentJournal $state $snapshot
+    try{
+        Remove-LGAutomation;Remove-LGTask
+        Register-LGTask (Get-LGRuntimePath $state) -Enabled:($state.Manifest.Phase -eq 'Active')
+        if($state.Manifest.Phase -eq 'Active'){Wait-LGWorker}
+        Write-LGJson (Join-Path $script:Data 'active.json') $state.Manifest
+    }catch{
+        $failure=$_
+        try{Restore-LGDeployment $snapshot}catch{$pending.Phase='RecoveryRequired';Write-LGJson (Join-Path $script:Data 'active.json') $pending;Throw-LGError 'REPAIR_ROLLBACK_PENDING' '修复未完成，请再次检查升级恢复记录。'}
+        throw $failure
+    }
+    '自动执行配置已修复；原始备份、启动规则和暂停状态保持不变。'
 }

@@ -9,6 +9,15 @@
     finally { if ([IO.File]::Exists($temp)) { [IO.File]::Delete($temp) } }
 }
 function Read-LGJson { param([string]$Path) Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json }
+function Throw-LGError {
+    param([string]$Code,[string]$Message)
+    $error=[InvalidOperationException]::new($Message);$error.Data['LowGearCode']=$Code;throw $error
+}
+function Get-LGProperty {
+    param($Object,[string]$Name,$Default=$null)
+    if($null -ne $Object -and $null -ne $Object.PSObject.Properties[$Name]){return $Object.$Name}
+    $Default
+}
 function Assert-LGDirectory {
     param([string]$Path)
     if (Test-Path -LiteralPath $Path) {
@@ -157,6 +166,12 @@ function Read-LGActive {
     if((Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash -cne $active.BackupHash){throw '原始备份丢失或完整性核验失败。'}
     $backup=Read-LGJson $backupPath
     if($backup.Schema -ne 1 -or $backup.Machine -cne $active.Machine -or ($backup.Registry.Image -join '|') -cne ($script:Images -join '|')){throw '原始备份内容不匹配。'}
-    if($active.Runtime -cnotmatch '^app-1\.0\.0-[a-f0-9]{32}$'){throw '运行目录记录无效。'}
+    if($active.Version -cnotmatch '^1\.\d+\.\d+$' -or $active.Runtime -cnotmatch ('^app-'+[regex]::Escape($active.Version)+'-[a-f0-9]{32}$')){Throw-LGError 'STATE_RUNTIME_INVALID' '运行目录与安装版本不匹配。'}
+    if($active.Phase -notin @('Installing','Active','Paused','Restoring','Upgrading','RecoveryRequired')){Throw-LGError 'STATE_PHASE_INVALID' '安装事务状态不受支持。'}
     [pscustomobject]@{Manifest=$active;Original=$backup}
+}
+
+function Write-LGProgress {
+    param([string]$Message)
+    if($script:ProgressPath){Write-LGJson $script:ProgressPath ([pscustomobject]@{Message=$Message})}
 }

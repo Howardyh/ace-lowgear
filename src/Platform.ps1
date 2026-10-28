@@ -1,11 +1,17 @@
 ﻿function Initialize-LGNative {
     if(-not('LowGear.Runtime' -as [type])) {
-        Add-Type -Path (Join-Path $PSScriptRoot 'Runtime.cs') -ReferencedAssemblies 'System.Web.Extensions.dll' -ErrorAction Stop
+        Add-Type -TypeDefinition (Get-LGRuntimeSource) -ReferencedAssemblies 'System.Web.Extensions.dll' -ErrorAction Stop
     }
+    if([LowGear.Runtime]::Version -cne $script:Version){Throw-LGError 'HOST_VERSION_MISMATCH' '当前窗口已加载其他版本，请关闭后重新打开新版入口。'}
+}
+function Get-LGRuntimeSource {
+    param([string]$Version=$script:Version)
+    if($Version -cnotmatch '^1\.\d+\.\d+$'){throw '运行版本格式无效。'}
+    [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Runtime.cs')).Replace('__LOWGEAR_VERSION__',$Version)
 }
 function Build-LGRuntime {
-    param([string]$Destination,[string]$Source)
-    if(-not $Source){$Source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Runtime.cs'))}
+    param([string]$Destination,[string]$Source,[string]$ProductVersion=$script:Version)
+    if(-not $Source){$Source=Get-LGRuntimeSource $ProductVersion}
     if(Test-Path -LiteralPath $Destination){throw '拒绝覆盖已有运行程序。'}
     Add-Type -AssemblyName System.Web.Extensions
     $provider=[Microsoft.CSharp.CSharpCodeProvider]::new()
@@ -64,7 +70,7 @@ function Restore-LGTask {
     }
 }
 function Register-LGTask {
-    param([string]$Runtime,[switch]$SkipImmediate,[string]$ProbeImage)
+    param([string]$Runtime,[switch]$SkipImmediate,[string]$ProbeImage,[bool]$Enabled=$true)
     if($ProbeImage -and $ProbeImage -cnotmatch '^LowGearProbe-[a-f0-9]{32}\.exe$'){throw '任务测试程序名无效。'}
     [void](Get-LGTaskSnapshot)
     $service=Get-LGService
@@ -74,7 +80,7 @@ function Register-LGTask {
     $definition.RegistrationInfo.Description='Apply low CPU and very low I/O once per ACE startup, verify, then exit.'
     $definition.Principal.UserId='SYSTEM'
     $definition.Principal.RunLevel=1
-    $definition.Settings.Enabled=$true
+    $definition.Settings.Enabled=$Enabled
     $definition.Settings.StartWhenAvailable=$true
     $definition.Settings.DisallowStartIfOnBatteries=$false
     $definition.Settings.StopIfGoingOnBatteries=$false
@@ -87,8 +93,36 @@ function Register-LGTask {
     $action.Arguments=if($ProbeImage){'--probe "'+$script:Data+'" '+$ProbeImage+' 20'}else{'--once "'+$script:Data+'"'}
     $action.WorkingDirectory=$script:Data
     $task=$service.GetFolder('\').RegisterTaskDefinition($script:TaskName,$definition,6,'SYSTEM',$null,5)
-    Register-LGAutomation
-    if(-not $SkipImmediate){[void]$task.Run($null)}
+    if($Enabled){Register-LGAutomation}
+    if($Enabled -and -not $SkipImmediate){Start-LGTaskSession $task}
+}
+function Start-LGTaskSession {
+    param($Task)
+    $before=$null;$path=Join-Path $script:Data 'last-run.json'
+    if(Test-Path -LiteralPath $path){try{$before=Read-LGJson $path}catch{}}
+    $script:BeforeSessionId=Get-LGProperty $before 'SessionId' ''
+    $script:JoinSessionId=''
+    $script:SessionRequestedUtc=[DateTime]::UtcNow
+    if($Task.State -eq 4 -and (Test-LGLiveSession $Task $before)){$script:JoinSessionId=$before.SessionId;return}
+    [void]$Task.Run($null)
+}
+function Test-LGLiveSession {
+    param($Task,$Report)
+    if((Get-LGProperty $Report 'SessionId' '') -cnotmatch '^[a-f0-9]{32}$' -or (Get-LGProperty $Report 'Version') -cne $script:Version -or
+       (Get-LGProperty $Report 'SessionState') -notin @('Starting','Verifying') -or $Task.State -ne 4){return $false}
+    try{
+        $process=Get-Process -Id $Report.WorkerId -ErrorAction Stop
+        try{$process.Path -ieq $Task.Definition.Actions.Item(1).Path -and [Math]::Abs(($process.StartTime.ToUniversalTime()-[DateTime]::Parse($Report.StartedAtUtc).ToUniversalTime()).TotalSeconds) -lt 2}
+        finally{$process.Dispose()}
+    }catch{$false}
+}
+function Test-LGNewSession {
+    param($Report,[string]$Before,[DateTime]$Requested)
+    $id=Get-LGProperty $Report 'SessionId' ''
+    if($id -cnotmatch '^[a-f0-9]{32}$' -or $id -ceq $Before -or (Get-LGProperty $Report 'Version') -cne $script:Version){return $false}
+    $started=[DateTime]::MinValue
+    if(-not [DateTime]::TryParse([string](Get-LGProperty $Report 'StartedAtUtc'),[ref]$started)){return $false}
+    $started.ToUniversalTime() -ge $Requested.AddSeconds(-1)
 }
 function Wait-LGWorker {
     $watch=[Diagnostics.Stopwatch]::StartNew()
@@ -97,11 +131,15 @@ function Wait-LGWorker {
         $path=Join-Path $script:Data 'last-run.json'
         if($null -ne $task -and $task.State -in @(3,4) -and (Test-Path -LiteralPath $path)){
             $beat=Read-LGJson $path
-            if(([DateTime]::UtcNow-[DateTime]::Parse($beat.TimestampUtc).ToUniversalTime()).TotalSeconds -lt 20){return}
+            $joined=$script:JoinSessionId -and (Get-LGProperty $beat 'SessionId' '') -ceq $script:JoinSessionId -and (Test-LGLiveSession $task $beat)
+            if($joined -or (Test-LGNewSession $beat $script:BeforeSessionId $script:SessionRequestedUtc)){
+                if($beat.SessionState -eq 'Failed'){Throw-LGError 'RUNTIME_FAILURE' '本次执行失败，请检查诊断状态。'}
+                return
+            }
         }
         Start-Sleep -Milliseconds 250
     }
-    throw '一次性任务未能启动或未产生本次执行记录。'
+    Throw-LGError 'SESSION_START_TIMEOUT' '一次性任务未能启动或未产生本次执行记录。'
 }
 function Get-LGAutomation {
     $name=$script:EventName

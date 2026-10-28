@@ -11,6 +11,7 @@ namespace LowGear {
     public sealed class Sample {
         public string Image;
         public int? ProcessId;
+        public string CreationUtc;
         public bool Running;
         public uint? CpuClass;
         public int? IoPriority;
@@ -33,14 +34,43 @@ namespace LowGear {
         public bool BindLastCpu = false;
         public int IntervalSeconds = 3;
     }
+    public sealed class SessionTracker {
+        string identity = "";
+        public int Matches;
+        public int Observe(Sample[] samples, bool probe) {
+            var parts = new List<string>();
+            foreach (var s in samples) if (s.Running) parts.Add(s.Image + ":" + s.ProcessId + ":" + s.CreationUtc);
+            parts.Sort(StringComparer.Ordinal);
+            string next = String.Join("|", parts.ToArray());
+            if (!Runtime.SessionMatches(samples, probe)) { Matches = 0; identity = ""; }
+            else { Matches = identity == next ? Matches + 1 : 1; identity = next; }
+            return Matches;
+        }
+    }
+    public sealed class Session {
+        public int Schema = 1;
+        public string Product = "ACE LowGear";
+        public string Version = Runtime.Version;
+        public string SessionId = Guid.NewGuid().ToString("N");
+        public string StartedAtUtc = DateTime.UtcNow.ToString("o");
+        public string TimestampUtc;
+        public string EndedAtUtc;
+        public long ElapsedMilliseconds;
+        public int WorkerId = Process.GetCurrentProcess().Id;
+        public string SessionState = "Starting";
+        public string ErrorCode;
+        public long Corrections;
+        public Sample[] Processes = new Sample[0];
+    }
     public static class Runtime {
-        public const string Version = "1.0.0";
+        public const string Version = "__LOWGEAR_VERSION__";
         public static readonly string[] Targets = { "SGuard64.exe", "SGuardSvc64.exe", "ACE-Service64.exe" };
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
         [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
         [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
         [DllImport("kernel32.dll", SetLastError=true)] static extern uint GetPriorityClass(IntPtr handle);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool SetPriorityClass(IntPtr handle, uint value);
+        [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessTimes(IntPtr handle, out long created, out long exited, out long kernel, out long user);
         [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool QueryFullProcessImageName(IntPtr handle, uint flags, StringBuilder name, ref uint size);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetProcessAffinityMask(IntPtr handle, out UIntPtr process, out UIntPtr system);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool SetProcessAffinityMask(IntPtr handle, UIntPtr mask);
@@ -100,6 +130,8 @@ namespace LowGear {
             if (read == IntPtr.Zero) { result.Errors.Add(Win32("OpenProcess")); return result; }
             try {
                 if (!IdentityMatches(read, image, result.Errors)) return result;
+                long created, exited, kernel, user;
+                if (GetProcessTimes(read, out created, out exited, out kernel, out user)) result.CreationUtc = DateTime.FromFileTimeUtc(created).ToString("o");
                 Read(read, result, last);
                 if (apply && (result.CpuClass != 64 || result.IoPriority != 0 || (last && result.AffinityMatched != true))) {
                     IntPtr write = OpenProcess(0x1200, false, pid);
@@ -171,8 +203,10 @@ namespace LowGear {
             if (test && (duration < 1 || duration > 60)) throw new ArgumentException("A probe worker must have a bounded lifetime.");
             bool owns = false;
             using (var mutex = new Mutex(false, test ? "Local\\LowGearProbe-" + probe : "Global\\ACE-LowGear-1")) {
+                Session session = null; var clock = Stopwatch.StartNew();
                 try { try { owns = mutex.WaitOne(0); } catch (AbandonedMutexException) { owns = true; } if (!owns) return 0;
-                    var clock = Stopwatch.StartNew(); long corrections = 0; int consecutiveMatches = 0;
+                    session = new Session(); var tracker = new SessionTracker();
+                    SaveSession(root, session, clock, false);
                     double limit = test ? duration : 45;
                     if (!test) Thread.Sleep(5000);
                     Sample[] samples = new Sample[0];
@@ -187,17 +221,33 @@ namespace LowGear {
                                 running++;
                             }
                         }
-                        corrections += changes;
-                        consecutiveMatches = SessionMatches(samples, test) ? consecutiveMatches + 1 : 0;
+                        session.Corrections += changes;
+                        int consecutiveMatches = tracker.Observe(samples, test);
                         string state = consecutiveMatches >= (test ? 2 : 3) ? "Completed" : running == 0 ? "NoTargets" : "Verifying";
-                        WriteJson(Path.Combine(root,"last-run.json"), new { Product = "ACE LowGear", Version = Version, TimestampUtc = DateTime.UtcNow.ToString("o"), WorkerId = Process.GetCurrentProcess().Id, SessionState = state, Corrections = corrections, Processes = samples });
+                        session.Processes = samples; session.SessionState = state;
+                        SaveSession(root, session, clock, state == "Completed" || (!test && state == "NoTargets"));
                         if (state == "Completed" || (!test && state == "NoTargets")) return 0;
-                        Thread.Sleep(policy.IntervalSeconds * 1000);
+                        int remaining = (int)Math.Max(0, (limit - clock.Elapsed.TotalSeconds) * 1000);
+                        Thread.Sleep(Math.Min(policy.IntervalSeconds * 1000, remaining));
                     }
-                    WriteJson(Path.Combine(root,"last-run.json"), new { Product = "ACE LowGear", Version = Version, TimestampUtc = DateTime.UtcNow.ToString("o"), WorkerId = Process.GetCurrentProcess().Id, SessionState = "Incomplete", Corrections = corrections, Processes = samples });
+                    session.SessionState = "Incomplete"; session.Processes = samples;
+                    SaveSession(root, session, clock, true);
                     return 2;
+                } catch (Exception error) {
+                    if (session != null) {
+                        session.SessionState = "Failed"; session.ErrorCode = "RUNTIME_FAILURE";
+                        SaveSession(root, session, clock, true);
+                        WriteJson(Path.Combine(root, "fault.json"), new { SessionId = session.SessionId, Version = Version, Error = error.GetType().Name + ": " + error.Message });
+                    }
+                    return 1;
                 } finally { if (owns) mutex.ReleaseMutex(); }
             }
+        }
+        static void SaveSession(string root, Session session, Stopwatch clock, bool ended) {
+            session.TimestampUtc = DateTime.UtcNow.ToString("o");
+            session.ElapsedMilliseconds = clock.ElapsedMilliseconds;
+            if (ended) session.EndedAtUtc = session.TimestampUtc;
+            WriteJson(Path.Combine(root, "last-run.json"), session);
         }
         [STAThread] public static int Main(string[] args) {
             try {

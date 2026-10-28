@@ -1,5 +1,25 @@
 # 🪶 ACE LowGear
 
+> **1.1.0 local candidate:** improves upgrades, status and usability while keeping one-shot scheduling. The public stable release stays at 1.0.0 until candidate acceptance.
+
+## 🆕 Changes in 1.1
+
+- From 1.0.0, open the new `Start.cmd` and choose **升级本机组件**. The earliest original backup, affinity policy and paused/enabled state are retained. Failed upgrades try to roll back; use **修复自动执行** to undo an interrupted deployment.
+- The header distinguishes panel and installed versions. Session results show their time and duration. Configuration health and live verification are displayed separately, including partial-query failures.
+- Affinity and self-test controls are grouped under advanced options. First-time guidance explains enabling management, starting the game and checking live results.
+- Repair only rebuilds owned task/event configuration. Conflicting edits, unknown ownership, damaged backups and invalid policies are not overwritten. Paused installations stay paused.
+- Preview **诊断摘要…** before copying it. The allowlisted summary contains versions, processor counts, configuration states and error codes, with no usernames, paths, PIDs, machine identifiers, raw messages or backups. Nothing is uploaded automatically.
+- Reads run away from the UI thread: about 5 seconds for processes, 30 seconds for full checks. Manual refresh forces a full check; queries never overlap. Closing waits while a configuration-changing operation is active.
+
+```powershell
+.\LowGear.ps1 -Command Upgrade
+.\LowGear.ps1 -Command Repair
+.\LowGear.ps1 -Command Diagnose
+.\LowGear.ps1 -Command Install -ClearLastCpu
+```
+
+`Upgrade` retains paused/enabled state. `Install` keeps its install-and-enable meaning and preserves the affinity choice when omitted. Existing shortcuts and exit codes remain supported. No resident correction, automatic updates, telemetry or portable EXE is added.
+
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
 [![Verify source](https://github.com/Howardyh/ace-lowgear/actions/workflows/verify.yml/badge.svg)](https://github.com/Howardyh/ace-lowgear/actions/workflows/verify.yml)
@@ -19,7 +39,7 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 
 ## 🚀 Quick start
 
-1. Open [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest) and download `ace-lowgear-1.0.0-source.zip` from **Assets**. Extract the entire archive into a folder. Keep all included files together.
+1. Open [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest) and download `ace-lowgear-1.1.0-source.zip` from **Assets**. Extract the entire archive into a folder. Keep all included files together.
 2. Double-click **`Start.cmd`**, accept the Windows administrator prompt, and open the control panel.
 3. Click **启用自动管理** (Enable automatic management). After it finishes, close the panel and launch your game normally.
 

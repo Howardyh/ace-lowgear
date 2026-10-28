@@ -23,5 +23,9 @@ jobs:
         run: .\tests\Run.ps1 -StartupProbe
       - name: Test real isolated process-start events
         run: .\tests\Event.ps1
+      - name: Test upgrades, rollback and diagnostic privacy
+        run: .\tests\Upgrade.ps1
+      - name: Test asynchronous panel and display scales
+        run: .\tests\Panel.ps1
       - name: Verify source package
         run: .\tools\Package.ps1

@@ -71,6 +71,7 @@ try {
         function script:Test-LGStartup {[pscustomobject]@{Passed=$true;Mode='IsolatedTransactionDouble'}}
         function script:Register-LGTask {param([string]$Runtime) throw 'Injected scheduler failure'}
         function script:Wait-LGWorker {}
+        function script:Get-LGTaskHealth {param($State) New-LGHealth 'Healthy' 'OK' 'Isolated task adapter'}
         function script:Get-LGAutomation {[pscustomobject]@{Filter=$null;Consumer=$null;Ready=$true}}
         function script:Register-LGAutomation {}
         function script:Remove-LGAutomation {}

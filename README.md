@@ -1,5 +1,26 @@
 # 🪶 ACE LowGear
 
+> **1.1.0 本地候选版**：在 1.0.0 的一次性调度基础上完善升级、状态与界面。候选版真实 ACE 验收完成前，GitHub 正式版仍保留 1.0.0。
+
+## 🆕 1.1 使用变化
+
+- **已有 1.0.0**：从新版 `Start.cmd` 打开面板，点击“升级本机组件”。最早原始备份、相关性策略和暂停状态会保留。升级失败会尝试回退；中断后可点击“修复自动执行”撤回未完成的部署。
+- **首次安装**：点击“启用自动管理”。安装成功后可以关闭窗口，正常启动游戏。
+- **版本与结果**：右上角分别显示面板和本机组件版本；最近会话增加时间、耗时。自动配置、实际读值和故障分项显示，某项查询失败不会把其他结果一起隐藏。
+- **高级选项**：相关性与自检放在“高级选项”。启动时绑定的勾选状态在点击“启用自动管理”后保存。
+- **手动修复**：修复归属明确的任务或启动事件配置。遇到外部修改、归属不明、备份损坏或策略无效时停止覆盖。暂停状态会保留，修复不会自行启用。
+- **诊断摘要**：点击“诊断摘要…”先预览，再点击复制。只包含版本、Windows 版本、处理器数量、配置状态及错误码；不包含用户名、路径、PID、机器标识、原始错误文本或备份，不会自动上传。
+- **界面响应**：进程读值约每 5 秒异步读取，完整配置约每 30 秒检查。手动刷新执行完整检查。修改配置时会暂缓关闭窗口，避免操作未结束就误以为完成。
+
+```powershell
+.\LowGear.ps1 -Command Upgrade        # 保留启用/暂停状态及相关性策略
+.\LowGear.ps1 -Command Repair         # 手动修复，或撤回未完成的升级
+.\LowGear.ps1 -Command Diagnose       # 仅输出可分享的脱敏摘要
+.\LowGear.ps1 -Command Install -ClearLastCpu  # 启用并取消下次启动的 CPU 绑定
+```
+
+`Install` 保持“安装并启用”的语义；不指定相关性参数时保留已有选择。旧的 `SetAffinity` 无参数用法仍表示停止下次启动绑定，旧快捷入口与退出码保留。1.1 没有新增常驻纠错、自动更新、遥测或便携 EXE。
+
 **每次 ACE 启动，自动降低 CPU / I/O 优先级，核验后退出。**
 
 [![Verify source](https://github.com/Howardyh/ace-lowgear/actions/workflows/verify.yml/badge.svg)](https://github.com/Howardyh/ace-lowgear/actions/workflows/verify.yml)
@@ -21,7 +42,7 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 
 ## 🚀 三步开始
 
-1. 到 [Releases 页面](https://github.com/Howardyh/ace-lowgear/releases/latest)，在 **Assets** 中下载 `ace-lowgear-1.0.0-source.zip`，**完整解压**到一个普通文件夹。不要直接在压缩包里运行，也不要只下载单个启动文件。
+1. 到 [Releases 页面](https://github.com/Howardyh/ace-lowgear/releases/latest)，在 **Assets** 中下载 `ace-lowgear-1.1.0-source.zip`，**完整解压**到一个普通文件夹。不要直接在压缩包里运行，也不要只下载单个启动文件。
 2. 双击 **`Start.cmd`**，允许 Windows 管理员提示，打开中文控制中心。
 3. 点击 **“启用自动管理”**，等待完成。之后可以关闭面板，正常启动游戏。
 
