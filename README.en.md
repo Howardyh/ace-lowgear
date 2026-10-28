@@ -1,24 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.1.0 local candidate:** improves upgrades, status and usability while keeping one-shot scheduling. The public stable release stays at 1.0.0 until candidate acceptance.
-
-## 🆕 Changes in 1.1
-
-- From 1.0.0, open the new `Start.cmd` and choose **升级本机组件**. The earliest original backup, affinity policy and paused/enabled state are retained. Failed upgrades try to roll back; use **修复自动执行** to undo an interrupted deployment.
-- The header distinguishes panel and installed versions. Session results show their time and duration. Configuration health and live verification are displayed separately, including partial-query failures.
-- Affinity and self-test controls are grouped under advanced options. First-time guidance explains enabling management, starting the game and checking live results.
-- Repair only rebuilds owned task/event configuration. Conflicting edits, unknown ownership, damaged backups and invalid policies are not overwritten. Paused installations stay paused.
-- Preview **诊断摘要…** before copying it. The allowlisted summary contains versions, processor counts, configuration states and error codes, with no usernames, paths, PIDs, machine identifiers, raw messages or backups. Nothing is uploaded automatically.
-- Reads run away from the UI thread: about 5 seconds for processes, 30 seconds for full checks. Manual refresh forces a full check; queries never overlap. Closing waits while a configuration-changing operation is active.
-
-```powershell
-.\LowGear.ps1 -Command Upgrade
-.\LowGear.ps1 -Command Repair
-.\LowGear.ps1 -Command Diagnose
-.\LowGear.ps1 -Command Install -ClearLastCpu
-```
-
-`Upgrade` retains paused/enabled state. `Install` keeps its install-and-enable meaning and preserves the affinity choice when omitted. Existing shortcuts and exit codes remain supported. No resident correction, automatic updates, telemetry or portable EXE is added.
+> **1.1.0:** improves lossless upgrades, session verification, manual repair and the Chinese panel while retaining one session per startup, followed by exit.
 
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
@@ -49,18 +31,39 @@ The installer checks startup priority behavior, saves the original settings and 
 
 On first use, launch your game, wait about 45 seconds, then open the panel and click **刷新状态** (Refresh). Running targets should show CPU **低**, I/O **非常低**, and **已核验** (Verified).
 
+## 🆕 Changes in 1.1
+
+- From 1.0.0, open the new `Start.cmd` and choose **升级本机组件**. The earliest original backup, affinity policy and paused/enabled state are retained. Failed upgrades try to roll back; use **修复自动执行** to undo an interrupted deployment.
+- The header distinguishes panel and installed versions. Session results show their time and duration. Configuration health and live verification are displayed separately, including partial-query failures.
+- Affinity and self-test controls are grouped under advanced options. First-time guidance explains enabling management, starting the game and checking live results.
+- Repair only rebuilds owned task/event configuration. Conflicting edits, unknown ownership, damaged backups and invalid policies are not overwritten. Paused installations stay paused.
+- Preview **诊断摘要…** before copying it. The allowlisted summary contains versions, processor counts, configuration states and error codes, with no usernames, paths, PIDs, machine identifiers, raw messages or backups. Nothing is uploaded automatically.
+- Reads run away from the UI thread: about 5 seconds for processes, 30 seconds for full checks. Manual refresh forces a full check; queries never overlap. Closing waits while a configuration-changing operation is active.
+
+```powershell
+.\LowGear.ps1 -Command Upgrade
+.\LowGear.ps1 -Command Repair
+.\LowGear.ps1 -Command Diagnose
+.\LowGear.ps1 -Command Install -ClearLastCpu
+```
+
+`Upgrade` retains paused/enabled state. `Install` keeps its install-and-enable meaning and preserves the affinity choice when omitted. Existing shortcuts and exit codes remain supported. No resident correction, automatic updates, telemetry or portable EXE is added.
+
 ## 🎛️ Controls
 
 | Chinese label | Action |
 |---|---|
 | 启用自动管理 | Install or enable; keep the earliest original backup |
+| 升级本机组件 | Upgrade components while keeping enabled/paused state, backups and affinity policy |
 | 立即应用一次 | Apply and read back CPU / I/O settings for current instances |
 | 刷新状态 | Read startup configuration, live values and the last session result |
+| 诊断摘要… | Preview a sanitized summary before copying it for an issue |
 | 本次绑定最后 CPU | Apply low priorities and last-logical-CPU affinity once |
 | 启动时也绑定最后一个逻辑 CPU | Check, then enable management to apply affinity in each startup session |
 | 运行自检 | Test startup behavior with a temporary, uniquely named process |
 | 暂停自动执行 | Remove automatic triggering and stop the task; keep startup rules and backups |
 | 恢复自动执行 | Restore automatic triggering and run one session now |
+| 修复自动执行 | Rebuild owned task/event configuration while keeping paused state |
 | 完整恢复原设置 | Remove automation and restore the original startup settings; keep backups |
 
 Affinity is optional and detected from the current computer's active CPU mask. It supports one processor group with up to 64 logical CPUs. Multi-group systems can use priority management independently. To disable startup affinity, uncheck it and enable management again; existing process affinity lasts until a normal restart.
@@ -119,10 +122,10 @@ Status and one-time actions return `0` when current readings match, `1` for fail
 
 ## 🧪 Verification and privacy
 
-Isolated tests cover original-state recovery, migration, rollback, native priorities, affinity, real Windows startup events, session exit and no continuing correction afterward. A user has also reported successful real ACE verification after reboot on one computer. This does not establish compatibility with every computer or game environment.
+Version 1.1 passed **126 local checks** covering existing features, upgrade rollback, diagnostic privacy, the asynchronous panel and real Windows startup events. In real ACE acceptance on one computer on 2026-10-28, both core images matched CPU / I/O and the existing affinity policy. A fresh session completed in about 11.1 seconds, the worker exited, and three subsequent read-only checks matched. `ACE-Service64.exe` was absent and was not verified. **A full reboot has not been tested with 1.1; the earlier reboot acceptance report applies to 1.0.0.** Other computers and game environments still need their own initial verification.
 
-Run `tests/Run.ps1`; add `-StartupProbe` in an administrator Windows PowerShell session for real temporary IFEO tests. Run `tests/Event.ps1` as administrator for real event/task tests. Use `tools/Validate-Public.ps1` before `tools/Package.ps1` to validate and package the explicit source allowlist.
+Run `tests/Run.ps1`; add `-StartupProbe` in an administrator Windows PowerShell session for real temporary IFEO tests. Run `tests/Event.ps1` as administrator for real event/task tests, `tests/Upgrade.ps1` for upgrade and privacy tests, and `tests/Panel.ps1` in an STA session for panel checks. Use `tools/Validate-Public.ps1` before `tools/Package.ps1` to validate and package the explicit source allowlist.
 
-The project has no telemetry or automatic uploads. `public-files.json` allows only source, documentation and tests. Generated executables, machine backups, state and logs are excluded. When [reporting an issue](https://github.com/Howardyh/ace-lowgear/issues), redact personal paths, usernames and machine identifiers; do not upload original backups.
+The project has no telemetry or automatic uploads. `public-files.json` allows only source, documentation and tests. Generated executables, machine backups, state and logs are excluded. When [reporting an issue](https://github.com/Howardyh/ace-lowgear/issues), describe the steps and share the panel's diagnostic summary after previewing it. Redact personal paths, usernames and machine identifiers from any additional material; do not upload original backups.
 
 Licensed under [MIT](LICENSE).
