@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.3.0 local candidate:** Mica control, window memory and safe placement recovery, retaining the Fluent panel and apply-on-startup, verify and exit. The public stable release remains 1.2.0 pending visual review.
+> **1.3.0 prerelease:** Mica control, window memory and safe placement recovery, retaining the Fluent panel and apply-on-startup, verify and exit. [Try 1.3](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) · [Stable 1.2](https://github.com/Howardyh/ace-lowgear/releases/latest)
 
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
@@ -21,7 +21,7 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 
 ## 🚀 Quick start
 
-1. Download the matching `ace-lowgear-<version>-source.zip` from the **Assets** section of [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest), then extract it in full. Local candidate packages use the same steps. Keep all included files together.
+1. Choose the [1.3 appearance prerelease](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) or [stable 1.2](https://github.com/Howardyh/ace-lowgear/releases/latest), download its `ace-lowgear-<version>-source.zip` from **Assets**, then extract it in full. Keep all included files together.
 2. Double-click **`Start.cmd`**, accept the Windows administrator prompt, and open the control panel.
 3. Click **启用自动管理** (Enable automatic management). After it finishes, close the panel and launch your game normally.
 
@@ -31,7 +31,7 @@ The installer checks startup priority behavior, saves the original settings and 
 
 On first use, launch your game, wait about 45 seconds, then open the panel and click **刷新状态** (Refresh). Running targets should show CPU **低**, I/O **非常低**, and **已核验** (Verified).
 
-## 🪟 Appearance and placement in 1.3 (local candidate)
+## 🪟 Appearance and placement in 1.3 (prerelease)
 
 Open **设置 → 外观** (Settings → Appearance):
 
@@ -40,7 +40,9 @@ Open **设置 → 外观** (Settings → Appearance):
 - Placement adapts to current work areas and WPF scale, supports negative secondary-monitor coordinates and returns to the primary display when the saved display is absent. Small work areas relax minimum dimensions. Live recovery only moves a window with an inaccessible caption.
 - **恢复外观默认** restores system theme, automatic Mica and window memory, then centres a normal 1060×800 window on the current display, fitting smaller work areas. Scheduling policies and original backups are retained.
 
-The existing theme-only `ui.json` is unchanged. Its sibling `appearance.json` stores material and placement only; malformed geometry resets independently. No display identifiers are collected, and geometry is excluded from diagnostics and source packages. Closing releases display-change hooks. This candidate has not been deployed to the installed worker or published to GitHub. Native window checks and simulated display layouts are reported separately in [verification](docs/验证.md).
+The existing theme-only `ui.json` is unchanged. Its sibling `appearance.json` stores material and placement only; malformed geometry resets independently. No display identifiers are collected, and geometry is excluded from diagnostics and source packages. Closing releases display-change hooks.
+
+Version 1.3 is a source-only prerelease with 248 local checks passed; 1.2 remains stable. Opening the new panel does not automatically upgrade the installed worker. Existing installations can use **升级本机组件**, retaining enabled/paused state, policy and the earliest backup. Physical display unplugging is not yet accepted; native window checks and simulated display layouts are reported separately in [verification](docs/验证.md).
 
 ## 🆕 Fluent panel in 1.2
 
