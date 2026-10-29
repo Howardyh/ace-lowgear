@@ -144,6 +144,10 @@ try{
     $from11=& $module {Read-LGActive}
     Assert ($from11.Manifest.Version -ceq $currentVersion -and $from11.Manifest.Phase -eq 'Paused' -and $from11.Manifest.BackupHash -ceq $backupHash) 'Upgrade v1.1 while preserving the paused state and earliest backup hash'
     Assert ((& $module {Read-LGPolicy}).BindLastCpu -and -not (& $module {Get-LGTask}).Enabled) 'The v1.1 upgrade keeps affinity without enabling the paused task'
+    & $module {Seed-Old 'Active' '1.2.0';Upgrade-LG}|Out-Null
+    $from12=& $module {Read-LGActive}
+    Assert ($from12.Manifest.Version -ceq $currentVersion -and $from12.Manifest.Phase -eq 'Active' -and $from12.Manifest.BackupHash -ceq $backupHash) 'Upgrade v1.2 while preserving the enabled state and earliest backup hash'
+    Assert ((& $module {Read-LGPolicy}).BindLastCpu -and (& $module {Get-LGTask}).Enabled -and (& $module {Get-LGAutomation}).Ready) 'The v1.2 upgrade keeps affinity and active automation'
     & $module {Restore-LG}|Out-Null
     Assert (-not (Test-Path (Join-Path $temp 'v1\active.json')) -and -not (& $module {Get-LGImage 'SGuard64.exe'}).ImageKeyExists) 'Full restoration after upgrades reaches earliest absent baseline'
     [pscustomobject]@{Status='Passed';Count=$checks.Count;Checks=$checks.ToArray()}|ConvertTo-Json -Depth 5

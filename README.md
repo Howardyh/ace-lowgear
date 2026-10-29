@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.2.0**：Fluent 三页控制中心，支持跟随系统的浅深主题与原生云母，保留“启动时设置，核验后退出”。
+> **1.3.0 本地候选**：新增云母开关、窗口记忆与安全位置恢复，保留 Fluent 三页控制中心及“启动时设置，核验后退出”。公开稳定版目前为 1.2.0，候选版待界面审核后发布。
 
 **每次 ACE 启动，自动降低 CPU / I/O 优先级，核验后退出。**
 
@@ -23,7 +23,7 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 
 ## 🚀 三步开始
 
-1. 到 [Releases 页面](https://github.com/Howardyh/ace-lowgear/releases/latest)，在 **Assets** 下载 `ace-lowgear-1.2.0-source.zip`，**完整解压**到普通文件夹。不要直接在压缩包里运行，也不要只复制单个启动文件。
+1. 到 [Releases 页面](https://github.com/Howardyh/ace-lowgear/releases/latest)，在 **Assets** 下载对应版本的 `ace-lowgear-<版本>-source.zip`，**完整解压**到普通文件夹。本地候选包也按同样方式使用。不要直接在压缩包里运行，也不要只复制单个启动文件。
 2. 双击 **`Start.cmd`**，允许 Windows 管理员提示，打开中文控制中心。
 3. 点击 **“启用自动管理”**，等待完成。之后可以关闭面板，正常启动游戏。
 
@@ -32,6 +32,19 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 **重启后的使用：**启用状态会保留，下次 ACE 启动时仍会自动执行，无需重新安装。手动暂停后，可在面板点击“恢复自动执行”。
 
 首次使用时，建议启动游戏并等待约 45 秒，再打开面板点击 **“刷新状态”**，确认运行实例的 CPU 为“低”、I/O 为“非常低”，结果为“已核验”。
+
+## 🪟 1.3 外观与窗口控制（本地候选）
+
+在“设置 → 外观”中调整，立即生效，无需改动自动执行配置：
+
+- **背景材质**：选择“自动使用云母”或“关闭，使用实色”。面板显示当前实际效果及回退原因；高对比度、系统透明效果与节电设置仍优先遵循 Windows。
+- **记住窗口大小和位置**：默认开启。正常关闭后保存普通窗口尺寸、所在工作区内的位置和最大化状态；最小化关闭也不会让下次启动隐藏。关闭此选项只清除记忆，当前窗口不移动。
+- **安全恢复位置**：按当前显示器工作区和 WPF 缩放换算；支持副屏负坐标，显示器移除时返回主屏。工作区过小时缩小窗口并放宽最小尺寸，保留页面滚动；打开期间只在标题栏无法操作时修正位置。
+- **恢复外观默认**：恢复跟随系统、自动云母和窗口记忆，并将普通窗口按默认 1060×800 居中到当前显示器；空间不足时适配工作区。不会恢复调度策略或原始备份。
+
+主题仍只保存在原来的 `ui.json`；材质和窗口记忆单独保存在同目录的 `appearance.json`。旧版主题文件保持兼容，外观文件损坏不会影响调度、诊断或最早原始备份。位置记忆和显示器几何不会进入诊断摘要与源码包。关闭后不保留显示器监听。
+
+本轮只提供本地候选源码与预览，未升级当前执行组件，未上传 GitHub。原生窗口测试与显示器几何模拟分别记录，见[验证说明](docs/验证.md)。
 
 ## 🆕 1.2 Fluent 界面
 
@@ -70,6 +83,9 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 | 概览 | 立即应用一次 | 对当前运行实例设置低 CPU / 非常低 I/O，并立即回读 |
 | 各页右上角 | 刷新 | 强制完整检查配置及当前进程 |
 | 设置 | 明暗主题 | 跟随系统、浅色或深色；立即生效并记住本机选择 |
+| 设置 | 背景材质 | 自动使用云母或关闭为实色；显示实际效果与原因 |
+| 设置 | 记住窗口大小和位置 | 正常关闭时保存；关闭记忆不移动当前窗口 |
+| 设置 | 恢复外观默认 | 恢复默认外观，普通窗口居中到当前显示器；调度配置保留 |
 | 设置 | 启动时绑定最后一个逻辑 CPU | 已安装时点击“保存策略”；首次安装时随启用一并保存 |
 | 设置 | 暂停 / 恢复自动执行 | 管理自动触发，保留启动规则和原始备份 |
 | 设置 | 升级本机组件 | 保留启用/暂停状态、原始备份和相关性策略 |
@@ -160,6 +176,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Event.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Upgrade.ps1
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\Panel.ps1
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\Window.ps1
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\Appearance.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-Public.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Package.ps1
 ```

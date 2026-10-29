@@ -1,5 +1,6 @@
 ﻿. (Join-Path $PSScriptRoot 'Theme.ps1')
 . (Join-Path $PSScriptRoot 'PanelModel.ps1')
+. (Join-Path $PSScriptRoot 'Appearance.ps1')
 
 function New-LGPanelDialog {
     param($Ui,[ValidateSet('Diagnostic','Restore')][string]$Kind)
@@ -29,7 +30,7 @@ function Show-LGPanel {
     param([switch]$RenderOnly,[string]$ImagePath,[double]$RenderScale=1,[switch]$PassThru,
         [ValidateSet('System','Light','Dark')][string]$ThemeMode='System',
         [ValidateSet('Overview','Settings','Diagnostics')][string]$PreviewPage='Overview',
-        [double]$RenderWidth=1060,[double]$RenderHeight=800,[switch]$Demo,[string]$PreferencePath)
+        [double]$RenderWidth=1060,[double]$RenderHeight=800,[switch]$Demo,[string]$PreferencePath,[string]$AppearancePath)
     Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
     Initialize-LGWindowEffects
     $reader=[Xml.XmlReader]::Create([IO.StringReader]::new([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Panel.xaml'))))
@@ -37,14 +38,18 @@ function Show-LGPanel {
     $names=@('SidebarColumn','BrandText','BrandCaption','OverviewNav','SettingsNav','DiagnosticsNav','OverviewNavLabel','SettingsNavLabel','DiagnosticsNavLabel','OverviewPage','SettingsPage','DiagnosticsPage',
         'PageTitle','PageCaption','VersionText','MaterialText','PreviewBadge','ManagerText','ManagerHint','LiveStatus','LiveText','SummaryText','GuideText','ProcessesList','SessionText','DetailText','HealthText','HealthList',
         'PrimaryButton','ApplyButton','OpenSettingsButton','RefreshButton','InstallButton','UpgradeButton','PauseButton','ResumeButton','RepairButton','DiagnosticButton','LastButton','SelfTestButton','RestoreButton','SaveAffinityButton',
-        'PersistentAffinity','AffinityText','AffinitySavedText','SettingsVersionText','ThemeCombo','AppearanceHint','OperationText','OperationProgress','ReadTimestampText')
+        'PersistentAffinity','AffinityText','AffinitySavedText','SettingsVersionText','ThemeCombo','MaterialCombo','RememberWindow','ResetAppearanceButton','WindowHint','AppearanceHint','OperationText','OperationProgress','ReadTimestampText')
     $controls=@{};foreach($name in $names){$controls[$name]=$window.FindName($name);if($null -eq $controls[$name]){throw ('界面控件缺失：'+$name)}}
+    $geometryEnabled=-not $RenderOnly -and (-not $PassThru -or $PSBoundParameters.ContainsKey('PreferencePath') -or $PSBoundParameters.ContainsKey('AppearancePath'))
     if(-not $PreferencePath){$PreferencePath=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'ACE-LowGear\ui.json'}
+    if(-not $AppearancePath){$leaf=if([IO.Path]::GetFileName($PreferencePath) -ieq 'ui.json'){'appearance.json'}else{[IO.Path]::GetFileNameWithoutExtension($PreferencePath)+'.appearance.json'};$AppearancePath=Join-Path (Split-Path $PreferencePath -Parent) $leaf}
     $preference=if($RenderOnly){[pscustomobject]@{Theme=$ThemeMode;Warning=$false}}else{Read-LGUiPreference $PreferencePath}
+    $visualPreference=if($geometryEnabled){Read-LGAppearancePreference $AppearancePath}else{New-LGAppearancePreference}
     $ui=[pscustomobject]@{Window=$window;Controls=$controls;Child=$null;JobDirectory=$null;LastReport=$null;Initialized=$false;ForceFull=$true;LastFull=[DateTime]::MinValue;LastRefresh=[DateTime]::MinValue;LastSuccess=[DateTime]::MinValue;Stale=$false
         Runspace=$null;Pipeline=$null;Pending=$null;QueryStarted=[DateTime]::MinValue;QueryFull=$true;Closed=$false;QueuedCommand=$null;Entry=(Join-Path (Split-Path $PSScriptRoot -Parent) 'LowGear.ps1');LastDiagnostic=$null
         CurrentPage='Overview';Navigating=$false;Compact=$false;ProcessGroups=@();AffinityDirty=$false;SyncingAffinity=$false;ThemePreference=$preference.Theme;ThemeSyncing=$false;PreferenceWarning=$preference.Warning;PreferencePath=$PreferencePath;Appearance=$null;Native=$null;ApplyTheme=$null
-        Demo=([bool]$Demo -or [bool]$RenderOnly);Rendering=[bool]$RenderOnly;ConfirmRestoreOverride=$null;LastCommand=$null;TickHandler=$null}
+        Demo=([bool]$Demo -or [bool]$RenderOnly);Rendering=[bool]$RenderOnly;ConfirmRestoreOverride=$null;LastCommand=$null;TickHandler=$null
+        VisualPreference=$visualPreference;AppearancePath=$AppearancePath;AppearanceSyncing=$false;GeometryEnabled=$geometryEnabled;GeometryInitialized=$false;ApplyingBounds=$false;GeometryEnvironmentOverride=$null;ClosePreference=$null;LastNonMinimized='Normal';PendingGeometryRepair=$false;LastPlacement=$null}
     $getDiagnostic=Get-Command Get-LGDiagnostic
     $navigate={param([string]$page)
         if($ui.Closed -or $ui.Navigating -or $page -notin @('Overview','Settings','Diagnostics')){return}
@@ -61,28 +66,82 @@ function Show-LGPanel {
         foreach($name in @('OverviewNavLabel','SettingsNavLabel','DiagnosticsNavLabel','BrandCaption','VersionText','MaterialText')){$ui.Controls[$name].Visibility=if($ui.Compact){'Collapsed'}else{'Visible'}}
         $ui.Controls.BrandText.Text=if($ui.Compact){'LG'}else{'ACE LowGear'};$ui.Controls.BrandText.FontSize=if($ui.Compact){14}else{18}
     }.GetNewClosure()
+    $saveVisual={param($value=$null)
+        if(-not $ui.GeometryEnabled){return}
+        if($null -eq $value){$value=$ui.VisualPreference}
+        try{Write-LGAppearancePreference $ui.AppearancePath $value;$ui.VisualPreference.Warning=$false}catch{$ui.VisualPreference.Warning=$true;$ui.Controls.AppearanceHint.Text='外观偏好未能保存，当前选择仅在本次窗口生效。'}
+    }.GetNewClosure()
+    $placementEnvironment={
+        if($null -ne $ui.GeometryEnvironmentOverride){return $ui.GeometryEnvironmentOverride}
+        Get-LGPlacementEnvironment $ui.Window
+    }.GetNewClosure()
+    $applyPlacement={param([switch]$Reset)
+        if(-not $ui.GeometryEnabled -or $null -eq $ui.Native -or $ui.ApplyingBounds){return}
+        $environment=& $placementEnvironment
+        $saved=if($ui.VisualPreference.RememberWindow){$ui.VisualPreference.Placement}else{$null}
+        $current=[LowGear.UI.WindowPlacement]::CurrentBounds([Windows.Interop.WindowInteropHelper]::new($ui.Window).Handle,$environment.ScaleX,$environment.ScaleY)
+        $placement=if($Reset){[LowGear.UI.WindowPlacement]::DefaultFor($current,$environment.Areas,$environment.ScaleX,$environment.ScaleY)}else{[LowGear.UI.WindowPlacement]::Resolve($saved,$environment.Areas,$environment.ScaleX,$environment.ScaleY)}
+        $ui.ApplyingBounds=$true
+        try{
+            if($Reset){$ui.Window.WindowState='Normal'}
+            Set-LGWindowPlacement $ui.Window $placement
+            if($placement.Maximized){$ui.Window.WindowState='Maximized'}
+            $ui.LastPlacement=$placement;$ui.GeometryInitialized=$true
+        }finally{$ui.ApplyingBounds=$false}
+        $ui.Controls.WindowHint.Text=if($placement.Recovered){'原位置不在现有显示器上，已安全移回可用工作区。'}elseif($ui.VisualPreference.RememberWindow){'正常关闭后记住尺寸、位置及最大化状态；下次打开时校正到可用工作区。'}else{'下次打开使用默认尺寸居中显示；当前窗口不移动。'}
+    }.GetNewClosure()
+    $capturePlacement={
+        if(-not $ui.GeometryEnabled -or -not $ui.GeometryInitialized -or -not $ui.VisualPreference.RememberWindow){return $null}
+        $environment=& $placementEnvironment
+        [LowGear.UI.WindowPlacement]::Capture((Get-LGNormalBounds $ui.Window),($ui.LastNonMinimized -eq 'Maximized'),$environment.Areas,$environment.ScaleX,$environment.ScaleY)
+    }.GetNewClosure()
+    $repairPlacement={
+        if(-not $ui.GeometryEnabled -or -not $ui.GeometryInitialized -or $ui.ApplyingBounds){return}
+        if($ui.Window.WindowState -eq 'Minimized'){$ui.PendingGeometryRepair=$true;return}
+        $ui.PendingGeometryRepair=$false;$environment=& $placementEnvironment;$bounds=Get-LGNormalBounds $ui.Window
+        $visibleBounds=[LowGear.UI.WindowPlacement]::CurrentBounds([Windows.Interop.WindowInteropHelper]::new($ui.Window).Handle,$environment.ScaleX,$environment.ScaleY)
+        if([LowGear.UI.WindowPlacement]::Reachable($visibleBounds,$environment.Areas,$environment.ScaleX,$environment.ScaleY)){return}
+        $saved=[LowGear.UI.WindowPlacement]::Capture($bounds,($ui.Window.WindowState -eq 'Maximized'),$environment.Areas,$environment.ScaleX,$environment.ScaleY)
+        $placement=[LowGear.UI.WindowPlacement]::Resolve($saved,$environment.Areas,$environment.ScaleX,$environment.ScaleY)
+        $ui.ApplyingBounds=$true
+        try{$ui.Window.WindowState='Normal';Set-LGWindowPlacement $ui.Window $placement;if($placement.Maximized){$ui.Window.WindowState='Maximized'}}finally{$ui.ApplyingBounds=$false}
+        $ui.Controls.WindowHint.Text='显示器布局已变化，窗口已移回可用工作区。'
+    }.GetNewClosure()
     $applyTheme={param([string]$selection,[switch]$Persist,$Environment=$null)
         if($selection -cnotin @('System','Light','Dark')){return}
         $ui.ThemePreference=$selection
         if($null -eq $Environment){$Environment=Get-LGThemeEnvironment}
-        $appearance=Resolve-LGAppearance $selection $Environment
+        $appearance=Resolve-LGAppearance $selection $Environment $ui.VisualPreference.Material
         Set-LGThemeResources $ui.Window $appearance
         $mica=$false
         if($null -ne $ui.Native){$mica=$ui.Native.Apply(($appearance.Theme -eq 'Dark'),$appearance.Mica,$appearance.HighContrast)}
         if($mica){$ui.Window.Background=[Windows.Media.Brushes]::Transparent}else{$ui.Window.Background=$ui.Window.Resources['CanvasBrush']}
         $ui.Appearance=[pscustomobject]@{Theme=$appearance.Theme;HighContrast=$appearance.HighContrast;Mica=$mica;Reason=if($appearance.Mica -and -not $mica -and $null -ne $ui.Native){'ApiFailed'}else{$appearance.Reason}}
         $ui.Controls.MaterialText.Text=if($mica){'背景：云母 · 系统管理'}else{'背景：实色'}
-        $ui.Controls.AppearanceHint.Text=if($appearance.HighContrast){'已遵循 Windows 高对比度设置。'}elseif($mica){'支持时使用系统云母材质；关闭透明效果或进入节电状态时回退实色。'}elseif($ui.Rendering){'当前为静态预览；云母效果需在实际窗口中验收。'}else{'当前使用实色背景；支持云母且允许透明效果时自动启用。'}
+        $reasons=@{HighContrast='系统高对比度已开启';UserDisabled='你已关闭云母';Unsupported='当前 Windows 版本不支持';TransparencyOff='系统透明效果已关闭';BatterySaver='系统处于节电状态';ApiFailed='原生材质暂不可用'}
+        $reason=[string]$ui.Appearance.Reason
+        $ui.Controls.AppearanceHint.Text=if($ui.Rendering){'静态预览使用实色背景；材质效果以实际窗口为准。'}elseif($mica){'当前背景：云母（由系统管理）。'}elseif($reasons.ContainsKey($reason)){'当前背景：实色 · '+$reasons[$reason]+'。'}else{'当前背景：实色 · 正在等待窗口材质初始化。'}
         if($Persist){try{Write-LGUiPreference $ui.PreferencePath $selection;$ui.PreferenceWarning=$false}catch{$ui.PreferenceWarning=$true}}
         if($ui.PreferenceWarning){$ui.Controls.AppearanceHint.Text+=' 外观偏好未能读取或保存，当前选择仅在本次窗口生效。'}
+        if($ui.VisualPreference.Warning){$ui.Controls.AppearanceHint.Text+=' 材质或窗口偏好未能完整读取或保存，已使用可用设置。'}
+        $ui.AppearanceSyncing=$true
+        try{foreach($item in $ui.Controls.MaterialCombo.Items){if($item.Tag -ceq $ui.VisualPreference.Material){$ui.Controls.MaterialCombo.SelectedItem=$item;break}};$ui.Controls.RememberWindow.IsChecked=$ui.VisualPreference.RememberWindow}finally{$ui.AppearanceSyncing=$false}
+        if(-not $ui.GeometryInitialized){$ui.Controls.WindowHint.Text=if($ui.VisualPreference.RememberWindow){'正常关闭后记住尺寸、位置和最大化状态。'}else{'下次打开使用默认尺寸居中显示；当前窗口不移动。'}}
         $ui.ThemeSyncing=$true
         try{foreach($item in $ui.Controls.ThemeCombo.Items){if($item.Tag -ceq $selection){$ui.Controls.ThemeCombo.SelectedItem=$item;break}}}finally{$ui.ThemeSyncing=$false}
     }.GetNewClosure()
     $ui.ApplyTheme=$applyTheme
+    $resetAppearance={
+        if($null -ne $ui.Child -or $null -ne $ui.QueuedCommand){return}
+        $ui.VisualPreference=New-LGAppearancePreference
+        & $saveVisual;& $applyTheme 'System' -Persist;& $applyPlacement -Reset
+        $ui.Controls.OperationText.Text='已恢复默认外观与窗口位置。'
+    }.GetNewClosure()
     $setActions={
         $busy=$null -ne $ui.Child -or $null -ne $ui.QueuedCommand
         foreach($name in @('PrimaryButton','ApplyButton','RefreshButton','InstallButton','UpgradeButton','PauseButton','ResumeButton','RepairButton','DiagnosticButton','LastButton','SelfTestButton','RestoreButton','SaveAffinityButton')){$ui.Controls[$name].IsEnabled=-not $busy -and $null -ne $ui.LastReport}
         $ui.Controls.ThemeCombo.IsEnabled=-not $busy;$ui.Controls.PersistentAffinity.IsEnabled=-not $busy
+        foreach($name in @('MaterialCombo','RememberWindow','ResetAppearanceButton')){$ui.Controls[$name].IsEnabled=-not $busy}
         $animate=$busy -and [Windows.SystemParameters]::ClientAreaAnimation
         $ui.Controls.OperationProgress.Visibility=if($animate){'Visible'}else{'Collapsed'};$ui.Controls.OperationProgress.IsIndeterminate=$animate
         if($null -eq $ui.LastReport){return}
@@ -206,6 +265,8 @@ function Show-LGPanel {
     $tick={
         if($ui.Closed){return}
         if($null -ne $ui.Native -and $ui.Native.TakeChange()){& $applyTheme $ui.ThemePreference}
+        if($null -ne $ui.Native -and $ui.Native.TakeLayoutChange()){$ui.PendingGeometryRepair=$true}
+        if($ui.PendingGeometryRepair -and $ui.Window.WindowState -ne 'Minimized'){& $repairPlacement}
         if($null -ne $ui.Child){
             try{$progress=Join-Path $ui.JobDirectory 'progress.json';if(Test-Path -LiteralPath $progress){$ui.Controls.OperationText.Text=(Get-Content -LiteralPath $progress -Raw -Encoding UTF8|ConvertFrom-Json).Message}}catch{}
             if(-not $ui.Child.HasExited){return}
@@ -233,19 +294,23 @@ function Show-LGPanel {
     }.GetNewClosure()
     $closing={param($sender,$eventArgs)
         if($null -ne $ui.Child){$eventArgs.Cancel=$true;$ui.Controls.OperationText.Text='正在修改本机配置，请等待操作完成后关闭。'}
-        elseif($null -ne $ui.QueuedCommand){$ui.QueuedCommand=$null;$ui.Controls.OperationText.Text='所选操作尚未开始，已取消等待中的操作。'}
+        else{
+            if($null -ne $ui.QueuedCommand){$ui.QueuedCommand=$null;$ui.Controls.OperationText.Text='所选操作尚未开始，已取消等待中的操作。'}
+            if($ui.GeometryEnabled -and $ui.GeometryInitialized){$ui.ClosePreference=New-LGAppearancePreference;$ui.ClosePreference.Material=$ui.VisualPreference.Material;$ui.ClosePreference.RememberWindow=$ui.VisualPreference.RememberWindow;$ui.ClosePreference.Placement=& $capturePlacement}
+        }
     }.GetNewClosure()
     $timer=[Windows.Threading.DispatcherTimer]::new();$timer.Interval=[TimeSpan]::FromMilliseconds(250);$ui.TickHandler=[EventHandler]$tick;$timer.Add_Tick($ui.TickHandler)
     $cleanup={
         if($ui.Closed){return}
         $ui.Closed=$true;$timer.Stop();$timer.Remove_Tick($ui.TickHandler)
+        if($null -ne $ui.ClosePreference){& $saveVisual $ui.ClosePreference}
         if($null -ne $ui.Native){try{$ui.Native.Dispose()}catch{};$ui.Native=$null}
         $pipeline=$ui.Pipeline;$runspace=$ui.Runspace;$ui.Pipeline=$null;$ui.Runspace=$null;$ui.Pending=$null
         if($null -ne $pipeline -or $null -ne $runspace){[LowGear.UI.WindowEffects]::ReleaseQuery($pipeline,$runspace)}
     }.GetNewClosure()
     # Keep helpers private to callbacks, including when invoked from a nested script scope.
-    $helpers=@(foreach($name in @('Read-LGUiPreference','Write-LGUiPreference','Get-LGThemeEnvironment','Resolve-LGAppearance','Set-LGThemeResources','Get-LGUiValue','Get-LGPrimaryAction','Get-LGCpuLabel','Get-LGIoLabel','Get-LGAffinityLabel','Get-LGProcessGroups','Get-LGPanelArguments','New-LGPanelDialog')){Get-Command $name})
-    foreach($callback in @($navigate,$resize,$applyTheme,$setActions,$update,$markStale,$refresh,$start,$diagnostic,$restore,$tick,$closing,$cleanup)){
+    $helpers=@(foreach($name in @('Read-LGUiPreference','Write-LGUiPreference','Get-LGThemeEnvironment','Resolve-LGAppearance','Set-LGThemeResources','Get-LGUiValue','Get-LGPrimaryAction','Get-LGCpuLabel','Get-LGIoLabel','Get-LGAffinityLabel','Get-LGProcessGroups','Get-LGPanelArguments','New-LGPanelDialog','New-LGAppearancePreference','ConvertTo-LGPlacement','Read-LGAppearancePreference','Write-LGAppearancePreference','Get-LGPlacementEnvironment','Get-LGNormalBounds','Set-LGWindowPlacement')){Get-Command $name})
+    foreach($callback in @($navigate,$resize,$saveVisual,$placementEnvironment,$applyPlacement,$capturePlacement,$repairPlacement,$applyTheme,$resetAppearance,$setActions,$update,$markStale,$refresh,$start,$diagnostic,$restore,$tick,$closing,$cleanup)){
         & $callback.Module {param($functions)foreach($function in $functions){Set-Item -Path ('Function:script:'+$function.Name) -Value $function.ScriptBlock}} $helpers
     }
     foreach($page in @('Overview','Settings','Diagnostics')){$controls[$page+'Nav'].Tag=$page;$controls[$page+'Nav'].Add_Checked({param($sender,$eventArgs)& $navigate ([string]$sender.Tag)}.GetNewClosure())}
@@ -258,11 +323,15 @@ function Show-LGPanel {
     $affinityChanged={if(-not $ui.SyncingAffinity -and $null -ne $ui.LastReport){$ui.AffinityDirty=[bool]$ui.Controls.PersistentAffinity.IsChecked -ne [bool]$ui.LastReport.BindLastCpu;& $setActions}}.GetNewClosure()
     $controls.PersistentAffinity.Add_Checked($affinityChanged);$controls.PersistentAffinity.Add_Unchecked($affinityChanged)
     $controls.ThemeCombo.Add_SelectionChanged({if(-not $ui.ThemeSyncing -and $null -ne $ui.Controls.ThemeCombo.SelectedItem){& $applyTheme ([string]$ui.Controls.ThemeCombo.SelectedItem.Tag) -Persist}}.GetNewClosure())
-    $window.Add_SourceInitialized({$handle=[Windows.Interop.WindowInteropHelper]::new($ui.Window).Handle;$ui.Native=[LowGear.UI.WindowEffects]::new($handle);& $applyTheme $ui.ThemePreference}.GetNewClosure())
+    $controls.MaterialCombo.Add_SelectionChanged({if(-not $ui.AppearanceSyncing -and $null -ne $ui.Controls.MaterialCombo.SelectedItem){$ui.VisualPreference.Material=[string]$ui.Controls.MaterialCombo.SelectedItem.Tag;& $saveVisual;& $applyTheme $ui.ThemePreference}}.GetNewClosure())
+    $rememberChanged={if(-not $ui.AppearanceSyncing){$ui.VisualPreference.RememberWindow=[bool]$ui.Controls.RememberWindow.IsChecked;if(-not $ui.VisualPreference.RememberWindow){$ui.VisualPreference.Placement=$null};& $saveVisual;$ui.Controls.WindowHint.Text=if($ui.VisualPreference.RememberWindow){'正常关闭后记住尺寸、位置及最大化状态。'}else{'下次打开使用默认尺寸居中显示；当前窗口不移动。'}}}.GetNewClosure()
+    $controls.RememberWindow.Add_Checked($rememberChanged);$controls.RememberWindow.Add_Unchecked($rememberChanged);$controls.ResetAppearanceButton.Add_Click($resetAppearance)
+    $window.Add_SourceInitialized({$handle=[Windows.Interop.WindowInteropHelper]::new($ui.Window).Handle;$ui.Native=[LowGear.UI.WindowEffects]::new($handle);& $applyTheme $ui.ThemePreference;& $applyPlacement}.GetNewClosure())
+    $window.Add_StateChanged({if($ui.Window.WindowState -ne 'Minimized'){$ui.LastNonMinimized=[string]$ui.Window.WindowState}}.GetNewClosure())
     $window.Add_SizeChanged({param($sender,$eventArgs)& $resize $sender.ActualWidth}.GetNewClosure());$window.Add_Closing($closing);$window.Add_Closed($cleanup)
     & $applyTheme $ui.ThemePreference;& $navigate $PreviewPage;& $resize $RenderWidth;& $setActions
     if($ui.Demo){$window.Title='ACE LowGear · Fluent 预览 · 示例数据';$controls.PreviewBadge.Visibility='Visible';& $update (Get-LGDemoReport)}
-    if($PassThru){return [pscustomobject]@{State=$ui;Update=$update;Start=$start;Refresh=$refresh;Tick=$tick;Closing=$closing;Cleanup=$cleanup;Navigate=$navigate;Resize=$resize;Theme=$applyTheme;Restore=$restore;Actions=$setActions}}
+    if($PassThru){return [pscustomobject]@{State=$ui;Update=$update;Start=$start;Refresh=$refresh;Tick=$tick;Closing=$closing;Cleanup=$cleanup;Navigate=$navigate;Resize=$resize;Theme=$applyTheme;Restore=$restore;Actions=$setActions;ResetAppearance=$resetAppearance;RepairPlacement=$repairPlacement;CapturePlacement=$capturePlacement}}
     if($RenderOnly){
         $window.Width=$RenderWidth;$window.Height=$RenderHeight
         $visual=$window.Content;$visual.Measure([Windows.Size]::new($RenderWidth,$RenderHeight));$visual.Arrange([Windows.Rect]::new(0,0,$RenderWidth,$RenderHeight));$visual.UpdateLayout()
@@ -270,5 +339,5 @@ function Show-LGPanel {
         $background=[Windows.Media.DrawingVisual]::new();$drawing=$background.RenderOpen();try{$drawing.DrawRectangle($window.Resources['CanvasBrush'],$null,[Windows.Rect]::new(0,0,$RenderWidth,$RenderHeight))}finally{$drawing.Close()}
         $bitmap.Render($background);$bitmap.Render($visual);$encoder=[Windows.Media.Imaging.PngBitmapEncoder]::new();$encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap));$stream=[IO.File]::Create($ImagePath);try{$encoder.Save($stream)}finally{$stream.Dispose()};$window.Close();& $cleanup;return
     }
-    $window.Height=[Math]::Max(600,[Math]::Min(800,[Windows.SystemParameters]::WorkArea.Height-30));$timer.Start();[void]$window.ShowDialog()
+    $timer.Start();[void]$window.ShowDialog()
 }

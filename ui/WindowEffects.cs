@@ -13,6 +13,7 @@ namespace LowGear.UI
         private HwndSource source;
         private HwndSourceHook hook;
         private int changed = 1;
+        private int layoutChanged;
         private readonly IntPtr handle;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -58,9 +59,12 @@ namespace LowGear.UI
             // Settings, system colours, DWM composition/colour and power policy.
             if (message == 0x001A || message == 0x0015 || message == 0x031A || message == 0x031E || message == 0x0218)
                 Interlocked.Exchange(ref changed, 1);
+            if (message == 0x007E || message == 0x02E0 || (message == 0x001A && wParam.ToInt64() == 0x002F))
+                Interlocked.Exchange(ref layoutChanged, 1);
             return IntPtr.Zero;
         }
         public bool TakeChange() { return Interlocked.Exchange(ref changed, 0) != 0; }
+        public bool TakeLayoutChange() { return Interlocked.Exchange(ref layoutChanged, 0) != 0; }
         public bool Apply(bool dark, bool mica, bool highContrast)
         {
             try

@@ -1,7 +1,7 @@
 ﻿function Initialize-LGWindowEffects {
     if(-not ('LowGear.UI.WindowEffects' -as [type])){
         $references=@([Windows.Interop.HwndSource].Assembly.Location,[Windows.DependencyObject].Assembly.Location,[PowerShell].Assembly.Location)
-        Add-Type -Path (Join-Path $PSScriptRoot 'WindowEffects.cs') -ReferencedAssemblies $references
+        Add-Type -Path @((Join-Path $PSScriptRoot 'WindowEffects.cs'),(Join-Path $PSScriptRoot 'WindowPlacement.cs')) -ReferencedAssemblies $references
     }
 }
 function Read-LGUiPreference {
@@ -39,9 +39,9 @@ function Get-LGThemeEnvironment {
     [pscustomobject]@{Dark=$dark;Transparency=$transparency;HighContrast=[Windows.SystemParameters]::HighContrast;Build=[LowGear.UI.WindowEffects]::Build;BatterySaver=[LowGear.UI.WindowEffects]::BatterySaver}
 }
 function Resolve-LGAppearance {
-    param([ValidateSet('System','Light','Dark')][string]$Theme,$Environment)
+    param([ValidateSet('System','Light','Dark')][string]$Theme,$Environment,[ValidateSet('Auto','Off')][string]$Material='Auto')
     $effective=if($Theme -eq 'System'){if($Environment.Dark){'Dark'}else{'Light'}}else{$Theme}
-    $reason=if($Environment.HighContrast){'HighContrast'}elseif($Environment.Build -lt 22621){'Unsupported'}elseif(-not $Environment.Transparency){'TransparencyOff'}elseif($Environment.BatterySaver){'BatterySaver'}else{'Mica'}
+    $reason=if($Environment.HighContrast){'HighContrast'}elseif($Material -eq 'Off'){'UserDisabled'}elseif($Environment.Build -lt 22621){'Unsupported'}elseif(-not $Environment.Transparency){'TransparencyOff'}elseif($Environment.BatterySaver){'BatterySaver'}else{'Mica'}
     [pscustomobject]@{Theme=$effective;HighContrast=[bool]$Environment.HighContrast;Mica=($reason -eq 'Mica');Reason=$reason}
 }
 function Set-LGThemeResources {

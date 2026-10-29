@@ -29,5 +29,7 @@ jobs:
         run: .\tests\Panel.ps1
       - name: Test native window lifecycle and material fallback
         run: .\tests\Window.ps1
+      - name: Test appearance preferences and window recovery
+        run: .\tests\Appearance.ps1
       - name: Verify source package
         run: .\tools\Package.ps1

@@ -1,6 +1,6 @@
 {
   "Name": "ACE LowGear",
-  "Version": "1.2.0",
+  "Version": "1.3.0",
   "Files": [
     ".gitattributes",
     ".gitignore",
@@ -41,6 +41,9 @@
     "CHANGELOG.md",
     "LICENSE",
     "public-files.json",
-    "tests/Window.ps1"
+    "tests/Window.ps1",
+    "ui/Appearance.ps1",
+    "ui/WindowPlacement.cs",
+    "tests/Appearance.ps1"
   ]
 }

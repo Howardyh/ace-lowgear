@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.2.0:** a three-page Fluent control centre, system/light/dark themes and native Mica, retaining apply-on-startup, verify and exit.
+> **1.3.0 local candidate:** Mica control, window memory and safe placement recovery, retaining the Fluent panel and apply-on-startup, verify and exit. The public stable release remains 1.2.0 pending visual review.
 
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
@@ -21,7 +21,7 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 
 ## 🚀 Quick start
 
-1. Download `ace-lowgear-1.2.0-source.zip` from the **Assets** section of [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest), then extract it in full. Keep all included files together.
+1. Download the matching `ace-lowgear-<version>-source.zip` from the **Assets** section of [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest), then extract it in full. Local candidate packages use the same steps. Keep all included files together.
 2. Double-click **`Start.cmd`**, accept the Windows administrator prompt, and open the control panel.
 3. Click **启用自动管理** (Enable automatic management). After it finishes, close the panel and launch your game normally.
 
@@ -30,6 +30,17 @@ The installer checks startup priority behavior, saves the original settings and 
 **After reboot:** no repeat installation or manual launch is needed. Each ACE startup triggers a new session. If you previously paused automation, use **恢复自动执行** to resume.
 
 On first use, launch your game, wait about 45 seconds, then open the panel and click **刷新状态** (Refresh). Running targets should show CPU **低**, I/O **非常低**, and **已核验** (Verified).
+
+## 🪟 Appearance and placement in 1.3 (local candidate)
+
+Open **设置 → 外观** (Settings → Appearance):
+
+- **背景材质** selects automatic native Mica or an explicit solid background. The panel explains the actual effect; high contrast, system transparency and battery saver remain authoritative.
+- **记住窗口大小和位置** is enabled by default. Normal close saves logical normal bounds, relative placement and maximized state. A minimized close never causes a hidden startup. Disabling memory clears the saved placement without moving the current window.
+- Placement adapts to current work areas and WPF scale, supports negative secondary-monitor coordinates and returns to the primary display when the saved display is absent. Small work areas relax minimum dimensions. Live recovery only moves a window with an inaccessible caption.
+- **恢复外观默认** restores system theme, automatic Mica and window memory, then centres a normal 1060×800 window on the current display, fitting smaller work areas. Scheduling policies and original backups are retained.
+
+The existing theme-only `ui.json` is unchanged. Its sibling `appearance.json` stores material and placement only; malformed geometry resets independently. No display identifiers are collected, and geometry is excluded from diagnostics and source packages. Closing releases display-change hooks. This candidate has not been deployed to the installed worker or published to GitHub. Native window checks and simulated display layouts are reported separately in [verification](docs/验证.md).
 
 ## 🆕 Fluent panel in 1.2
 
@@ -67,6 +78,9 @@ Version 1.2 passed 196 local checks, including native window material tests. A l
 | Overview | 立即应用一次 | Apply and read back low CPU / Very Low I/O for current instances |
 | All pages | 刷新 | Force a full configuration and live process check |
 | Settings | 明暗主题 | System, light or dark; applied immediately and stored locally |
+| Settings | 背景材质 | Automatic Mica or solid; show the actual effect and reason |
+| Settings | 记住窗口大小和位置 | Save on normal close; disabling memory keeps current placement |
+| Settings | 恢复外观默认 | Reset appearance and centre the normal window on its current display |
 | Settings | 启动时绑定最后一个逻辑 CPU | Save explicitly, or include the selection during first enable |
 | Settings | 暂停 / 恢复自动执行 | Manage automatic triggering while retaining startup rules and backups |
 | Settings | 升级本机组件 | Preserve enabled/paused state, original backup and affinity policy |
@@ -135,6 +149,8 @@ Status and one-time actions return `0` when current readings match, `1` for fail
 Version 1.1 passed **126 local checks** covering existing features, upgrade rollback, diagnostic privacy, the asynchronous panel and real Windows startup events. In real ACE acceptance on one computer on 2026-10-28, both core images matched CPU / I/O and the existing affinity policy. A fresh session completed in about 11.1 seconds, the worker exited, and three subsequent read-only checks matched. `ACE-Service64.exe` was absent and was not verified. **A full reboot has not been tested with 1.1; the earlier reboot acceptance report applies to 1.0.0.** Other computers and game environments still need their own initial verification.
 
 Run `tests/Run.ps1`; add `-StartupProbe` in an administrator Windows PowerShell session for real temporary IFEO tests. Run `tests/Event.ps1` as administrator for real event/task tests, `tests/Upgrade.ps1` for upgrade and privacy tests, and `tests/Panel.ps1` in an STA session for panel checks. Use `tools/Validate-Public.ps1` before `tools/Package.ps1` to validate and package the explicit source allowlist.
+
+Run `tests/Window.ps1` for a real HWND lifecycle and material fallback, and `tests/Appearance.ps1` in an STA session for isolated appearance persistence, close/reopen behavior and simulated display layouts. These tests use temporary preferences rather than the user's appearance files.
 
 The project has no telemetry or automatic uploads. `public-files.json` allows only source, documentation and tests. Generated executables, machine backups, state and logs are excluded. When [reporting an issue](https://github.com/Howardyh/ace-lowgear/issues), describe the steps and share the panel's diagnostic summary after previewing it. Redact personal paths, usernames and machine identifiers from any additional material; do not upload original backups.
 
