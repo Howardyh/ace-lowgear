@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.2.0 local candidate:** Fluent navigation, live light/dark themes and native Mica. The public stable release remains 1.1.0 pending local review.
+> **1.2.0:** a three-page Fluent control centre, system/light/dark themes and native Mica, retaining apply-on-startup, verify and exit.
 
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
@@ -21,7 +21,7 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 
 ## 🚀 Quick start
 
-1. Extract the provided local candidate `ace-lowgear-1.2.0-source.zip` in full. The public [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest) page still provides stable 1.1.0. Keep all included files together.
+1. Download `ace-lowgear-1.2.0-source.zip` from the **Assets** section of [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest), then extract it in full. Keep all included files together.
 2. Double-click **`Start.cmd`**, accept the Windows administrator prompt, and open the control panel.
 3. Click **启用自动管理** (Enable automatic management). After it finishes, close the panel and launch your game normally.
 
@@ -33,7 +33,7 @@ On first use, launch your game, wait about 45 seconds, then open the panel and c
 
 ## 🆕 Fluent panel in 1.2
 
-The 1.2 candidate passed 196 local checks, including native window material tests. Final desktop appearance and physical mouse dragging await review. Installed production components remain at 1.1.0; see the [verification scope](docs/验证.md).
+Version 1.2 passed 196 local checks, including native window material tests. A local upgrade from 1.1 preserved state and backups, and the user confirmed acceptance. This run did not capture fresh real ACE startup readings for 1.2 or automate physical mouse dragging; see the [verification scope](docs/验证.md).
 
 - **Overview / 概览:** automation configuration and live verification are separate. The primary action follows installation, upgrade and paused states. Expand each target group for every instance's PID, effective I/O, raw readings and local errors.
 - **Settings / 设置:** switch immediately between system, light and dark themes. Affinity changes remain drafts until **保存策略** (Save policy); first installation includes the selected choice. Pause, resume, component upgrade and full restore are grouped here.
