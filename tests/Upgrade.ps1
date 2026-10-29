@@ -3,6 +3,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $module=Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'src\LowGear.psm1') -Force -PassThru -DisableNameChecking
+$currentVersion=(Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'public-files.json') -Raw -Encoding UTF8|ConvertFrom-Json).Version
 $id=[Guid]::NewGuid().ToString('N');$temp=Join-Path ([IO.Path]::GetTempPath()) ('LowGear-upgrade-tests-'+$id);$registry='SOFTWARE\LowGearTests\'+$id
 $checks=[Collections.Generic.List[string]]::new()
 function Assert {param([bool]$Value,[string]$Name)if(-not $Value){throw ('FAIL: '+$Name)};$checks.Add($Name)}
@@ -42,11 +43,11 @@ try{
         Write-LGJson $backupPath ([pscustomobject]@{Schema=1;Machine=(Get-LGToken);Origin='MigratedOriginalBaseline';Registry=$originals;LegacyTask=[pscustomobject]@{Exists=$false}})
         $script:Baseline=[pscustomobject]@{Backup=$backupName;BackupHash=(Get-FileHash $backupPath -Algorithm SHA256).Hash}
         foreach($image in $script:Images){Set-LGImage $image}
-        function script:Seed-Old {param([string]$Phase='Paused')
-            $folder='app-1.0.0-'+[Guid]::NewGuid().ToString('N');$directory=Join-Path $script:Data $folder;[void][IO.Directory]::CreateDirectory($directory);$exe=Join-Path $directory 'LowGear.Worker.exe'
-            Build-LGRuntime $exe -ProductVersion '1.0.0'
+        function script:Seed-Old {param([string]$Phase='Paused',[string]$Version='1.0.0')
+            $folder='app-'+$Version+'-'+[Guid]::NewGuid().ToString('N');$directory=Join-Path $script:Data $folder;[void][IO.Directory]::CreateDirectory($directory);$exe=Join-Path $directory 'LowGear.Worker.exe'
+            Build-LGRuntime $exe -ProductVersion $Version
             Write-LGJson (Join-Path $script:Data 'policy.json') ([pscustomobject]@{Schema=1;BindLastCpu=$true;IntervalSeconds=3})
-            Write-LGJson (Join-Path $script:Data 'active.json') ([pscustomobject]@{Schema=1;Machine=(Get-LGToken);Version='1.0.0';Phase=$Phase;Runtime=$folder;RuntimeHash=(Get-FileHash $exe -Algorithm SHA256).Hash;Backup=$script:Baseline.Backup;BackupHash=$script:Baseline.BackupHash})
+            Write-LGJson (Join-Path $script:Data 'active.json') ([pscustomobject]@{Schema=1;Machine=(Get-LGToken);Version=$Version;Phase=$Phase;Runtime=$folder;RuntimeHash=(Get-FileHash $exe -Algorithm SHA256).Hash;Backup=$script:Baseline.Backup;BackupHash=$script:Baseline.BackupHash})
             New-TestTask $exe ($Phase -eq 'Active');$script:Filter=$false;$script:Consumer=$false;$script:Bound=$false
             if($Phase -eq 'Active'){Register-LGAutomation}
         }
@@ -55,7 +56,7 @@ try{
     $before=& $module {Read-LGActive};$backupHash=$before.Manifest.BackupHash
     & $module {Upgrade-LG}|Out-Null
     $state=& $module {Read-LGActive}
-    Assert ($state.Manifest.Version -eq '1.1.0' -and $state.Manifest.Phase -eq 'Paused') 'Upgrade a schema-1 v1.0 installation while retaining pause'
+    Assert ($state.Manifest.Version -eq $currentVersion -and $state.Manifest.Phase -eq 'Paused') 'Upgrade a schema-1 v1.0 installation while retaining pause'
     Assert ($state.Manifest.Backup -ceq $before.Manifest.Backup -and $state.Manifest.BackupHash -ceq $backupHash) 'Upgrade preserves earliest backup bytes and reference'
     Assert ((& $module {Read-LGJson (Join-Path $script:Data 'policy.json')}).BindLastCpu) 'Upgrade retains affinity policy'
     & $module {Invoke-LGCommand -Command SetAffinity}|Out-Null
@@ -112,7 +113,7 @@ try{
     Throws {& $module {Repair-LG}} 'Repair refuses a damaged original backup'
     [IO.File]::WriteAllBytes($backupPath,$bytes)
     $id1=[Guid]::NewGuid().ToString('N');$id2=[Guid]::NewGuid().ToString('N');$requested=[DateTime]::UtcNow
-    $recent=[pscustomobject]@{SessionId=$id1;Version='1.1.0';StartedAtUtc=$requested.ToString('o');SessionState='Completed'}
+    $recent=[pscustomobject]@{SessionId=$id1;Version=$currentVersion;StartedAtUtc=$requested.ToString('o');SessionState='Completed'}
     Assert (-not (& $module {param($r,$id,$at)Test-LGNewSession $r $id $at} $recent $id1 $requested)) 'A recent old session cannot satisfy a new start'
     $recent.SessionId=$id2
     Assert (& $module {param($r,$id,$at)Test-LGNewSession $r $id $at} $recent $id1 $requested) 'A new matching-version session acknowledges the requested start'
@@ -139,6 +140,10 @@ try{
     try{Assert ($worker.WaitForExit(5000) -and $worker.ExitCode -eq 1) 'Runtime policy failure exits with failure rather than remaining resident'}finally{if(-not $worker.HasExited){$worker.Kill();[void]$worker.WaitForExit(5000)};$worker.Dispose()}
     $fault=Get-Content (Join-Path $faultRoot 'fault.json') -Raw|ConvertFrom-Json;$session=Get-Content (Join-Path $faultRoot 'last-run.json') -Raw|ConvertFrom-Json
     Assert ($session.SessionState -eq 'Failed' -and $session.SessionId -cne $oldSession -and $fault.SessionId -ceq $session.SessionId -and $session.EndedAtUtc) 'Failure and final report belong to the same new session'
+    & $module {Seed-Old 'Paused' '1.1.0';Upgrade-LG}|Out-Null
+    $from11=& $module {Read-LGActive}
+    Assert ($from11.Manifest.Version -ceq $currentVersion -and $from11.Manifest.Phase -eq 'Paused' -and $from11.Manifest.BackupHash -ceq $backupHash) 'Upgrade v1.1 while preserving the paused state and earliest backup hash'
+    Assert ((& $module {Read-LGPolicy}).BindLastCpu -and -not (& $module {Get-LGTask}).Enabled) 'The v1.1 upgrade keeps affinity without enabling the paused task'
     & $module {Restore-LG}|Out-Null
     Assert (-not (Test-Path (Join-Path $temp 'v1\active.json')) -and -not (& $module {Get-LGImage 'SGuard64.exe'}).ImageKeyExists) 'Full restoration after upgrades reaches earliest absent baseline'
     [pscustomobject]@{Status='Passed';Count=$checks.Count;Checks=$checks.ToArray()}|ConvertTo-Json -Depth 5

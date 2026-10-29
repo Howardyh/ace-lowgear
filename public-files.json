@@ -1,6 +1,6 @@
 {
   "Name": "ACE LowGear",
-  "Version": "1.1.0",
+  "Version": "1.2.0",
   "Files": [
     ".gitattributes",
     ".gitignore",
@@ -23,6 +23,9 @@
     "src/Runtime.cs",
     "ui/Panel.xaml",
     "ui/Panel.ps1",
+    "ui/Theme.ps1",
+    "ui/PanelModel.ps1",
+    "ui/WindowEffects.cs",
     "tests/Run.ps1",
     "tests/Event.ps1",
     "tests/Upgrade.ps1",
@@ -37,6 +40,7 @@
     "docs/验证.md",
     "CHANGELOG.md",
     "LICENSE",
-    "public-files.json"
+    "public-files.json",
+    "tests/Window.ps1"
   ]
 }

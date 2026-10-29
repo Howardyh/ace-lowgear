@@ -27,5 +27,7 @@ jobs:
         run: .\tests\Upgrade.ps1
       - name: Test asynchronous panel and display scales
         run: .\tests\Panel.ps1
+      - name: Test native window lifecycle and material fallback
+        run: .\tests\Window.ps1
       - name: Verify source package
         run: .\tools\Package.ps1

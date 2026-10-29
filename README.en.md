@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.1.0:** improves lossless upgrades, session verification, manual repair and the Chinese panel while retaining one session per startup, followed by exit.
+> **1.2.0 local candidate:** Fluent navigation, live light/dark themes and native Mica. The public stable release remains 1.1.0 pending local review.
 
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
@@ -21,7 +21,7 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 
 ## 🚀 Quick start
 
-1. Open [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest) and download `ace-lowgear-1.1.0-source.zip` from **Assets**. Extract the entire archive into a folder. Keep all included files together.
+1. Extract the provided local candidate `ace-lowgear-1.2.0-source.zip` in full. The public [Releases](https://github.com/Howardyh/ace-lowgear/releases/latest) page still provides stable 1.1.0. Keep all included files together.
 2. Double-click **`Start.cmd`**, accept the Windows administrator prompt, and open the control panel.
 3. Click **启用自动管理** (Enable automatic management). After it finishes, close the panel and launch your game normally.
 
@@ -31,11 +31,21 @@ The installer checks startup priority behavior, saves the original settings and 
 
 On first use, launch your game, wait about 45 seconds, then open the panel and click **刷新状态** (Refresh). Running targets should show CPU **低**, I/O **非常低**, and **已核验** (Verified).
 
+## 🆕 Fluent panel in 1.2
+
+The 1.2 candidate passed 196 local checks, including native window material tests. Final desktop appearance and physical mouse dragging await review. Installed production components remain at 1.1.0; see the [verification scope](docs/验证.md).
+
+- **Overview / 概览:** automation configuration and live verification are separate. The primary action follows installation, upgrade and paused states. Expand each target group for every instance's PID, effective I/O, raw readings and local errors.
+- **Settings / 设置:** switch immediately between system, light and dark themes. Affinity changes remain drafts until **保存策略** (Save policy); first installation includes the selected choice. Pause, resume, component upgrade and full restore are grouped here.
+- **Diagnostics / 诊断:** independent health sections, self-test, manual repair, one-time last-CPU binding and diagnostic preview/copy remain available.
+- **Materials:** supported Windows 11 systems attempt native Mica, with a solid fallback for unsupported systems, transparency disabled, high contrast, battery saver or API failure. Windows 10 retains scheduling functionality. Only the theme choice is stored in `%LocalAppData%\ACE-LowGear\ui.json`; invalid preferences fall back to system theme.
+- **Feedback:** Chinese operation stages, indeterminate progress, visible stale-data timestamps, compact navigation and close protection. Full restore explains its effects before confirmation.
+
 ## 🆕 Changes in 1.1
 
 - From 1.0.0, open the new `Start.cmd` and choose **升级本机组件**. The earliest original backup, affinity policy and paused/enabled state are retained. Failed upgrades try to roll back; use **修复自动执行** to undo an interrupted deployment.
 - The header distinguishes panel and installed versions. Session results show their time and duration. Configuration health and live verification are displayed separately, including partial-query failures.
-- Affinity and self-test controls are grouped under advanced options. First-time guidance explains enabling management, starting the game and checking live results.
+- Version 1.1 grouped affinity and self-test under advanced options; 1.2 moves them into Settings and Diagnostics. First-time guidance explains enabling management, starting the game and checking live results.
 - Repair only rebuilds owned task/event configuration. Conflicting edits, unknown ownership, damaged backups and invalid policies are not overwritten. Paused installations stay paused.
 - Preview **诊断摘要…** before copying it. The allowlisted summary contains versions, processor counts, configuration states and error codes, with no usernames, paths, PIDs, machine identifiers, raw messages or backups. Nothing is uploaded automatically.
 - Reads run away from the UI thread: about 5 seconds for processes, 30 seconds for full checks. Manual refresh forces a full check; queries never overlap. Closing waits while a configuration-changing operation is active.
@@ -51,22 +61,22 @@ On first use, launch your game, wait about 45 seconds, then open the panel and c
 
 ## 🎛️ Controls
 
-| Chinese label | Action |
-|---|---|
-| 启用自动管理 | Install or enable; keep the earliest original backup |
-| 升级本机组件 | Upgrade components while keeping enabled/paused state, backups and affinity policy |
-| 立即应用一次 | Apply and read back CPU / I/O settings for current instances |
-| 刷新状态 | Read startup configuration, live values and the last session result |
-| 诊断摘要… | Preview a sanitized summary before copying it for an issue |
-| 本次绑定最后 CPU | Apply low priorities and last-logical-CPU affinity once |
-| 启动时也绑定最后一个逻辑 CPU | Check, then enable management to apply affinity in each startup session |
-| 运行自检 | Test startup behavior with a temporary, uniquely named process |
-| 暂停自动执行 | Remove automatic triggering and stop the task; keep startup rules and backups |
-| 恢复自动执行 | Restore automatic triggering and run one session now |
-| 修复自动执行 | Rebuild owned task/event configuration while keeping paused state |
-| 完整恢复原设置 | Remove automation and restore the original startup settings; keep backups |
+| Page | Chinese label | Action |
+|---|---|---|
+| Overview | Primary action | Enable, upgrade, resume or apply once according to current state |
+| Overview | 立即应用一次 | Apply and read back low CPU / Very Low I/O for current instances |
+| All pages | 刷新 | Force a full configuration and live process check |
+| Settings | 明暗主题 | System, light or dark; applied immediately and stored locally |
+| Settings | 启动时绑定最后一个逻辑 CPU | Save explicitly, or include the selection during first enable |
+| Settings | 暂停 / 恢复自动执行 | Manage automatic triggering while retaining startup rules and backups |
+| Settings | 升级本机组件 | Preserve enabled/paused state, original backup and affinity policy |
+| Settings | 完整恢复原设置 | Confirm and restore the earliest startup baseline; retain backups |
+| Diagnostics | 预览诊断摘要… | Preview the sanitized summary before copying; no automatic upload |
+| Diagnostics | 修复自动执行 | Rebuild owned task/event configuration while retaining pause |
+| Diagnostics | 运行自检 | Test startup behaviour with an isolated temporary process |
+| Diagnostics | 本次绑定最后 CPU | Apply low priorities and last-logical-CPU affinity once |
 
-Affinity is optional and detected from the current computer's active CPU mask. It supports one processor group with up to 64 logical CPUs. Multi-group systems can use priority management independently. To disable startup affinity, uncheck it and enable management again; existing process affinity lasts until a normal restart.
+Affinity is optional and detected from the current computer. Last-CPU binding supports one processor group with up to 64 logical CPUs; priority management remains available independently on multi-group systems. Saving changes affects future startups; existing instances retain their affinity until a normal restart or an explicit one-time binding.
 
 ## 🔎 Reading results
 
