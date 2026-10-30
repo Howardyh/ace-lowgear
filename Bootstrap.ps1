@@ -18,6 +18,12 @@ function Test-LGSourceFiles {
     }catch{$checks.Add([pscustomobject]@{Name='Source';State='Error';Code='SOURCE_MANIFEST_INVALID';Message='源码清单缺失或损坏，请重新下载并完整解压。'})}
     $checks.ToArray()
 }
+function Initialize-LGStartupSecurity {
+    # Pin the current host's built-in module; inherited PSModulePath may list another edition first.
+    $path=Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1'
+    $loaded=Get-Module Microsoft.PowerShell.Security
+    if($null -eq $loaded -or $loaded.Path -ine $path){Import-Module -Name $path -ErrorAction Stop}
+}
 function Test-LGStartupPath {
     param([string]$Path)
     try{
@@ -26,7 +32,8 @@ function Test-LGStartupPath {
         foreach($item in @($folder,$Path)){if((Test-Path -LiteralPath $item) -and ((Get-Item -LiteralPath $item -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){return $false}}
         if(-not [IO.Directory]::Exists($folder)){return $false}
         # Another administrator account may have a different TEMP after UAC.
-        $acl=Get-Acl -LiteralPath $folder
+        Initialize-LGStartupSecurity
+        $acl=Microsoft.PowerShell.Security\Get-Acl -LiteralPath $folder
         if(-not $acl.AreAccessRulesProtected){return $false}
         $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
         if($owner -in @('S-1-1-0','S-1-5-11','S-1-5-32-545')){return $false}
@@ -42,14 +49,15 @@ function Test-LGStartupPath {
     }catch{$false}
 }
 function New-LGStartupPath {
+    Initialize-LGStartupSecurity
     $folder=Join-Path ([IO.Path]::GetTempPath()) ('LowGear-start-'+[Guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($folder)
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     try{
         $acl=[Security.AccessControl.DirectorySecurity]::new();$acl.SetAccessRuleProtection($true,$false);$acl.SetOwner($identity.User)
         foreach($sid in @($identity.User.Value,'S-1-5-18','S-1-5-32-544')|Select-Object -Unique){[void]$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))}
-        Set-Acl -LiteralPath $folder -AclObject $acl
-    }finally{$identity.Dispose()}
+        Microsoft.PowerShell.Security\Set-Acl -LiteralPath $folder -AclObject $acl
+    }catch{try{[IO.Directory]::Delete($folder,$false)}catch{};throw}finally{$identity.Dispose()}
     Join-Path $folder 'ready.json'
 }
 function Write-LGStartupReady {

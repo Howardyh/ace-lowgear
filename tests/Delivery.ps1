@@ -44,6 +44,13 @@ exit 0
     [IO.File]::WriteAllText((Join-Path $launchFixture 'LowGear.ps1'),$stub,[Text.UTF8Encoding]::new($true))
     $launchResult=Invoke-LGBootstrap $launchFixture -NoDialog 6>$null
     Assert ($launchResult -eq 0) 'Real Windows PowerShell child receives a correctly quoted source and receipt path'
+    $poison=Join-Path $temp 'other-edition\Microsoft.PowerShell.Security';[void][IO.Directory]::CreateDirectory($poison)
+    [IO.File]::WriteAllText((Join-Path $poison 'Microsoft.PowerShell.Security.psd1'),"@{ModuleVersion='99.0';PowerShellVersion='99.0';RootModule='invalid.psm1';FunctionsToExport=@('Get-Acl','Set-Acl')}")
+    [IO.File]::WriteAllText((Join-Path $poison 'invalid.psm1'),"throw 'Other edition module must never load'")
+    $info=[Diagnostics.ProcessStartInfo]::new();$info.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe';$info.Arguments='-NoProfile -STA -ExecutionPolicy Bypass -File "'+(Join-Path $launchFixture 'Bootstrap.ps1')+'" -NoDialog';$info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+    $info.EnvironmentVariables['PSModulePath']=(Split-Path $poison -Parent)+';'+$env:PSModulePath
+    $child=[Diagnostics.Process]::Start($info)
+    try{Assert ($child.WaitForExit(15000) -and $child.ExitCode -eq 0) 'Cold startup pins its own built-in security module despite another edition in PSModulePath'}finally{$child.Dispose()}
     [IO.File]::Copy((Join-Path $root 'LowGear.ps1'),(Join-Path $launchFixture 'LowGear.ps1'),$true)
     $moduleStub=@'
 function Invoke-LGCommand {param($Command,$Last,$ProgressPath)[pscustomobject]@{Success=$false;Message='预检未完成';Detail=[pscustomobject]@{Passed=$false;Checks=@([pscustomobject]@{Name='System';State='Error';Code='PREFLIGHT_ENVIRONMENT_FAILED';Message='环境检查失败'})};Report=$null}}
