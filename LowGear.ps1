@@ -1,15 +1,17 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('Panel','Install','Status','ApplyOnce','LastCpu','Pause','Resume','Restore','SelfTest','SetAffinity','Upgrade','Repair','Diagnose')][string]$Command='Panel',
+    [ValidateSet('Panel','Install','Status','ApplyOnce','LastCpu','Pause','Resume','Restore','SelfTest','SetAffinity','Upgrade','Repair','Diagnose','Preflight')][string]$Command='Panel',
     [switch]$BindLastCpu,
     [switch]$ClearLastCpu,
     [switch]$Json,
     [switch]$Pause,
     [string]$ResultPath,
-    [string]$ProgressPath
+    [string]$ProgressPath,
+    [string]$StartupReadyPath
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+$entryParameters=@{}+$PSBoundParameters
 $exitCode=1
 function Write-LGResult {
     param($Value,[string]$Path)
@@ -20,6 +22,10 @@ function Write-LGResult {
     }finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
 }
 try {
+    if($ResultPath){$ResultPath=[IO.Path]::GetFullPath($ResultPath)}
+    if($ProgressPath){$ProgressPath=[IO.Path]::GetFullPath($ProgressPath)}
+    . (Join-Path $PSScriptRoot 'Bootstrap.ps1')
+    if($StartupReadyPath -and ($Command -ne 'Panel' -or -not(Test-LGStartupPath $StartupReadyPath))){throw '启动回执路径无效。'}
     if($BindLastCpu -and $ClearLastCpu){throw '不能同时启用和取消最后 CPU 绑定。'}
     if([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or -not [Environment]::Is64BitOperatingSystem -or [Environment]::OSVersion.Version.Major -lt 10){throw '需要 64 位 Windows 10 或 Windows 11。'}
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
@@ -28,11 +34,12 @@ try {
         $hostPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
         if(-not [Environment]::Is64BitProcess){$hostPath=Join-Path $env:SystemRoot 'Sysnative\WindowsPowerShell\v1.0\powershell.exe'}
         $arguments='-NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "{0}" -Command {1}' -f $PSCommandPath,$Command
-        if($BindLastCpu){$arguments+=' -BindLastCpu'}elseif($ClearLastCpu -or $PSBoundParameters.ContainsKey('BindLastCpu')){$arguments+=' -ClearLastCpu'}
+        if($BindLastCpu){$arguments+=' -BindLastCpu'}elseif($ClearLastCpu -or $entryParameters.ContainsKey('BindLastCpu')){$arguments+=' -ClearLastCpu'}
         if($Json){$arguments+=' -Json'}
         if($Pause){$arguments+=' -Pause'}
         if($ResultPath){$arguments+=' -ResultPath "'+$ResultPath+'"'}
         if($ProgressPath){$arguments+=' -ProgressPath "'+$ProgressPath+'"'}
+        if($StartupReadyPath){$arguments+=' -StartupReadyPath "'+$StartupReadyPath+'"'}
         $parameters=@{FilePath=$hostPath;ArgumentList=$arguments;Wait=$true;PassThru=$true}
         if(-not $admin){$parameters.Verb='RunAs'}
         if($Command -eq 'Panel' -or -not $Pause){$parameters.WindowStyle='Hidden'}
@@ -42,13 +49,17 @@ try {
     Import-Module (Join-Path $PSScriptRoot 'src\LowGear.psm1') -Force -DisableNameChecking
     if($Command -eq 'Panel'){
         . (Join-Path $PSScriptRoot 'ui\Panel.ps1')
-        Show-LGPanel
+        Show-LGPanel -StartupReadyPath $StartupReadyPath
         exit 0
     }
-    $last=if($ClearLastCpu){$false}elseif($PSBoundParameters.ContainsKey('BindLastCpu')){[bool]$BindLastCpu}else{$null}
+    $last=if($ClearLastCpu){$false}elseif($entryParameters.ContainsKey('BindLastCpu')){[bool]$BindLastCpu}else{$null}
     $result=Invoke-LGCommand -Command $Command -Last $last -ProgressPath $ProgressPath
     if($ResultPath){Write-LGResult $result $ResultPath}
     if($Command -eq 'Diagnose'){$result|ConvertTo-Json -Depth 8|Write-Output;exit 0}
+    if($Command -eq 'Preflight'){
+        if($Json){$result|ConvertTo-Json -Depth 30|Write-Output}else{Write-Host $result.Message;$result.Detail.Checks|Select-Object Name,State,Code,Message|Format-Table -Wrap|Out-Host}
+        if($result.Success){exit 0}else{exit 1}
+    }
     if($Json){$result | ConvertTo-Json -Depth 30 | Write-Output}
     else{
         Write-Host ('ACE LowGear '+$result.Report.Version+' · '+$result.Message)
@@ -64,6 +75,7 @@ try {
     }
 }
 catch{
+    if($StartupReadyPath -and (Get-Command Write-LGStartupReady -ErrorAction SilentlyContinue)){Write-LGStartupReady $StartupReadyPath 'Error' 'INTERFACE_FAILED'}
     $code='OPERATION_FAILED';$cause=$_.Exception
     while($null -ne $cause){if($cause.Data.Contains('LowGearCode')){$code=[string]$cause.Data['LowGearCode'];break};$cause=$cause.InnerException}
     $message=if($Command -eq 'Diagnose'){'诊断未完成。'}else{$_.Exception.Message}

@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.3.0 stable:** Mica control, window memory and safe placement recovery, retaining the Fluent panel and apply-on-startup, verify and exit. [Download latest](https://github.com/Howardyh/ace-lowgear/releases/latest) · [Previous 1.2](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0)
+> **1.4.0:** independent first-install wizard, visible startup failures, read-only preflight and operation results. Retains the Fluent panel and apply-on-startup, verify and exit. Release status and additional machine acceptance are recorded on [Releases](https://github.com/Howardyh/ace-lowgear/releases).
 
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
@@ -21,15 +21,23 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 
 ## 🚀 Quick start
 
-1. Download `ace-lowgear-1.3.0-source.zip` from the **Assets** of [stable 1.3](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0), then extract it in full. Keep all included files together. [Previous 1.2](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0) remains available.
-2. Double-click **`Start.cmd`**, accept the Windows administrator prompt, and open the control panel.
-3. Click **启用自动管理** (Enable automatic management). After it finishes, close the panel and launch your game normally.
+1. Extract the complete source package. For online downloads, choose the recommended `ace-lowgear-<version>-source.zip` under **Assets** on [Releases](https://github.com/Howardyh/ace-lowgear/releases). The `.sha256` is a checksum, not an application; GitHub's automatic Source code downloads are repository snapshots.
+2. Double-click **开始使用.cmd** or **Start.cmd**, accept the administrator prompt, and open the first-install wizard.
+3. Review the policy and checks, then choose **确认并启用**. The result explains the configuration and next step. You can also choose **先查看面板** to defer; this is remembered, with manual access from Overview later.
 
 The installer checks startup priority behavior, saves the original settings and registers automatic execution. The executable is compiled locally from the included source. No Python, Node.js or .NET SDK installation is required.
 
 **After reboot:** no repeat installation or manual launch is needed. Each ACE startup triggers a new session. If you previously paused automation, use **恢复自动执行** to resume.
 
 On first use, launch your game, wait about 45 seconds, then open the panel and click **刷新状态** (Refresh). Running targets should show CPU **低**, I/O **非常低**, and **已核验** (Verified).
+
+## 📦 Installation and delivery in 1.4
+
+The independent first-install wizard introduces the policy, performs read-only checks, asks for explicit confirmation, then shows execution and results. Choosing **先查看面板** remembers deferral; use Overview to install later. Existing and paused installations enter the panel directly, with uncertain or damaged state routed to Diagnostics.
+
+The primary launcher uses Windows PowerShell directly, reports missing runtime files, authorization cancellation and interface failures, and exits after readiness. A timeout does not kill or restart the original process. Installation, upgrade and restore have independent result pages; absent targets remain waiting, and paused upgrades stay paused.
+
+Use `.\LowGear.ps1 -Command Preflight -Json` for read-only checks (0 passes, 1 blocks). Existing commands retain their exit codes. Source archives use stage-neutral documentation; candidate/stable status and later machine acceptance are recorded on the release page without replacing frozen package hashes. See [installation and delivery](docs/安装与交付.md).
 
 ## 🪟 Appearance and placement in 1.3
 
@@ -42,7 +50,7 @@ Open **设置 → 外观** (Settings → Appearance):
 
 The existing theme-only `ui.json` is unchanged. Its sibling `appearance.json` stores material and placement only; malformed geometry resets independently. No display identifiers are collected, and geometry is excluded from diagnostics and source packages. Closing releases display-change hooks.
 
-Version 1.3 is stable after user interface acceptance, 248 local checks and a verified local 1.2 → 1.3 upgrade. Opening the new panel does not automatically upgrade the installed worker. Existing installations can use **升级本机组件**, retaining enabled/paused state, policy and the earliest backup. Physical display unplugging is not yet accepted; native window checks and simulated display layouts are reported separately in [verification](docs/验证.md). The tested tag and source archive are unchanged; their prerelease-era notes remain historical. This page and the release page describe the current release status.
+The 1.3 appearance features remain available; historical acceptance is recorded in [verification](docs/验证.md). Opening the new panel does not automatically upgrade the worker. Existing installations use **升级本机组件**, retaining enabled/paused state, policy and the earliest backup. Physical display unplugging and simulated layouts are reported separately.
 
 ## 🆕 Fluent panel in 1.2
 

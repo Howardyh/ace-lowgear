@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.3.0 正式版**：新增云母开关、窗口记忆与安全位置恢复，保留 Fluent 三页控制中心及“启动时设置，核验后退出”。[下载最新版](https://github.com/Howardyh/ace-lowgear/releases/latest) · [1.2 历史版本](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0)
+> **1.4.0**：独立首次安装向导、启动失败提示、只读预检与操作结果页；保留 Fluent 控制中心及“启动时设置，核验后退出”。发行状态及实机验收补充以 [Releases](https://github.com/Howardyh/ace-lowgear/releases) 为准。
 
 **每次 ACE 启动，自动降低 CPU / I/O 优先级，核验后退出。**
 
@@ -23,15 +23,28 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 
 ## 🚀 三步开始
 
-1. 到 [1.3 正式版](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) 的 **Assets** 下载 `ace-lowgear-1.3.0-source.zip`，**完整解压**到普通文件夹。不要直接在压缩包里运行，也不要只复制单个启动文件。[1.2 历史版本](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0) 继续保留。
-2. 双击 **`Start.cmd`**，允许 Windows 管理员提示，打开中文控制中心。
-3. 点击 **“启用自动管理”**，等待完成。之后可以关闭面板，正常启动游戏。
+1. 完整解压源码包到普通文件夹；网络下载时在 [Releases](https://github.com/Howardyh/ace-lowgear/releases) 的 **Assets** 选择推荐的 `ace-lowgear-<版本>-source.zip`。`.sha256` 是校验文件，无需运行；GitHub 自动生成的 Source code 是仓库快照。不要只复制启动入口。
+2. 双击 **“开始使用.cmd”** 或原 **`Start.cmd`**，允许 Windows 管理员提示。首次使用会打开独立安装向导。
+3. 阅读策略并完成检查，点击 **“确认并启用”**。完成页会说明配置结果和下一步；之后可以关闭窗口，正常启动游戏。也可选择“先查看面板”，此选择会记住，之后从概览重新进入向导。
 
 首次启用会检查本机启动优先级功能、保留原始设置，再注册自动执行。公开包只含源码，执行程序会在本机编译；**无需安装 Python、Node.js 或 .NET SDK**。
 
 **重启后的使用：**启用状态会保留，下次 ACE 启动时仍会自动执行，无需重新安装。手动暂停后，可在面板点击“恢复自动执行”。
 
 首次使用时，建议启动游戏并等待约 45 秒，再打开面板点击 **“刷新状态”**，确认运行实例的 CPU 为“低”、I/O 为“非常低”，结果为“已核验”。
+
+## 📦 1.4 安装与交付
+
+- **首次向导**：介绍与策略 → 检查与确认 → 执行 → 结果；可以先查看面板并记住选择。已有安装和暂停状态直接进入面板，异常记录进入诊断。
+- **启动反馈**：主入口直接调用 Windows PowerShell。缺少运行文件、取消授权或界面未就绪会给出原因；超时不自动重试或杀掉原窗口。
+- **只读预检**：查看源码、系统与配置检查，确认后才执行安装。已有用户升级前可核对当前/目标版本及启用或暂停状态。
+- **独立结果页**：安装、升级和恢复说明最终状态及下一步；无运行目标保持“等待游戏启动”，已暂停的升级继续暂停。恢复后可打开本机备份目录。
+
+详见[安装与交付](docs/安装与交付.md)。本包使用阶段无关的说明；候选/正式状态和新增实机验收由发布页记录，已冻结的源码包不因发布状态切换而更换哈希。
+
+```powershell
+.\LowGear.ps1 -Command Preflight -Json  # 只读检查；通过 0，阻断 1
+```
 
 ## 🪟 1.3 外观与窗口控制
 
@@ -44,7 +57,7 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 
 主题仍只保存在原来的 `ui.json`；材质和窗口记忆单独保存在同目录的 `appearance.json`。旧版主题文件保持兼容，外观文件损坏不会影响调度、诊断或最早原始备份。位置记忆和显示器几何不会进入诊断摘要与源码包。关闭后不保留显示器监听。
 
-1.3 已通过界面用户验收、248 项本地检查及单机 1.2 → 1.3 无损升级核验，作为正式版提供。打开新版面板不会自动升级本机执行组件；已有安装点击“升级本机组件”，保留启用/暂停状态、策略和最早备份。实际多显示器拔插尚未验收，原生窗口测试与显示器几何模拟分别记录，见[验证说明](docs/验证.md)。正式版沿用同一已测试标签与源码包，归档内预发布时期的说明作为历史记录保留，当前发布状态以本页和发布页为准。
+1.3 的外观功能继续保留；历史版本的验收记录见[验证说明](docs/验证.md)。打开新版面板不会自动升级本机执行组件；已有安装点击“升级本机组件”，保留启用/暂停状态、策略和最早备份。实际多显示器拔插与几何模拟分别记录。
 
 ## 🆕 1.2 Fluent 界面
 
@@ -177,6 +190,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Upgrade.ps1
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\Panel.ps1
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\Window.ps1
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\Appearance.ps1
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\Delivery.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Validate-Public.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Package.ps1
 ```

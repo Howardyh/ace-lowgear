@@ -31,5 +31,7 @@ jobs:
         run: .\tests\Window.ps1
       - name: Test appearance preferences and window recovery
         run: .\tests\Appearance.ps1
+      - name: Test startup delivery, onboarding and preflight
+        run: .\tests\Delivery.ps1
       - name: Verify source package
         run: .\tools\Package.ps1

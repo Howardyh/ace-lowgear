@@ -1,6 +1,6 @@
 {
   "Name": "ACE LowGear",
-  "Version": "1.3.0",
+  "Version": "1.4.0",
   "Files": [
     ".gitattributes",
     ".gitignore",
@@ -44,6 +44,13 @@
     "tests/Window.ps1",
     "ui/Appearance.ps1",
     "ui/WindowPlacement.cs",
-    "tests/Appearance.ps1"
+    "tests/Appearance.ps1",
+    "Bootstrap.ps1",
+    "src/Preflight.ps1",
+    "ui/Setup.ps1",
+    "开始使用.cmd",
+    "开始使用.txt",
+    "tests/Delivery.ps1",
+    "docs/安装与交付.md"
   ]
 }

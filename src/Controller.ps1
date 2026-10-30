@@ -152,13 +152,19 @@ function Get-LGSummary {
     '存在未达标或无法读取的实例，请查看各项状态和原因。'
 }
 function Invoke-LGCommand {
-    param([ValidateSet('Install','Status','ApplyOnce','LastCpu','Pause','Resume','Restore','SelfTest','SetAffinity','Upgrade','Repair','Diagnose')][string]$Command='Status',[Nullable[bool]]$Last=$null,[string]$ProgressPath)
+    param([ValidateSet('Install','Status','ApplyOnce','LastCpu','Pause','Resume','Restore','SelfTest','SetAffinity','Upgrade','Repair','Diagnose','Preflight')][string]$Command='Status',[Nullable[bool]]$Last=$null,[string]$ProgressPath)
+    if($Command -eq 'Preflight'){
+        $report=$null
+        try{Initialize-LGNative;$report=Get-LGStatus;$detail=Get-LGPreflight $report}
+        catch{$detail=[pscustomobject]@{Passed=$false;Migration=$false;Checks=@([pscustomobject]@{Name='System';State='Error';Code='PREFLIGHT_ENVIRONMENT_FAILED';Message='预检未能完成，请检查系统组件与权限；未执行安装或更改配置。'})}}
+        return [pscustomobject]@{Success=$detail.Passed;Message=if($detail.Passed){'预检完成；确认后才会修改配置。'}else{'预检发现阻断项，请按检查说明处理。'};Detail=$detail;Report=$report}
+    }
     Initialize-LGNative
     $script:ProgressPath=$ProgressPath
     Write-LGProgress '正在检查本机状态…'
     $lock=$null
     try {
-        if($Command -notin @('Status','Diagnose')){
+        if($Command -notin @('Status','Diagnose','Preflight')){
             Initialize-LGData
             $lock=[IO.File]::Open((Join-Path $script:Common 'operation.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
         }

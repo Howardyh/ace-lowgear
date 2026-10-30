@@ -1,6 +1,8 @@
 ﻿. (Join-Path $PSScriptRoot 'Theme.ps1')
 . (Join-Path $PSScriptRoot 'PanelModel.ps1')
 . (Join-Path $PSScriptRoot 'Appearance.ps1')
+. (Join-Path $PSScriptRoot 'Setup.ps1')
+. (Join-Path (Split-Path $PSScriptRoot -Parent) 'Bootstrap.ps1')
 
 function New-LGPanelDialog {
     param($Ui,[ValidateSet('Diagnostic','Restore')][string]$Kind)
@@ -30,7 +32,7 @@ function Show-LGPanel {
     param([switch]$RenderOnly,[string]$ImagePath,[double]$RenderScale=1,[switch]$PassThru,
         [ValidateSet('System','Light','Dark')][string]$ThemeMode='System',
         [ValidateSet('Overview','Settings','Diagnostics')][string]$PreviewPage='Overview',
-        [double]$RenderWidth=1060,[double]$RenderHeight=800,[switch]$Demo,[string]$PreferencePath,[string]$AppearancePath)
+        [double]$RenderWidth=1060,[double]$RenderHeight=800,[switch]$Demo,[string]$PreferencePath,[string]$AppearancePath,[string]$OnboardingPath,[string]$StartupReadyPath)
     Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
     Initialize-LGWindowEffects
     $reader=[Xml.XmlReader]::Create([IO.StringReader]::new([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Panel.xaml'))))
@@ -43,13 +45,15 @@ function Show-LGPanel {
     $geometryEnabled=-not $RenderOnly -and (-not $PassThru -or $PSBoundParameters.ContainsKey('PreferencePath') -or $PSBoundParameters.ContainsKey('AppearancePath'))
     if(-not $PreferencePath){$PreferencePath=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'ACE-LowGear\ui.json'}
     if(-not $AppearancePath){$leaf=if([IO.Path]::GetFileName($PreferencePath) -ieq 'ui.json'){'appearance.json'}else{[IO.Path]::GetFileNameWithoutExtension($PreferencePath)+'.appearance.json'};$AppearancePath=Join-Path (Split-Path $PreferencePath -Parent) $leaf}
+    if(-not $OnboardingPath){$OnboardingPath=Join-Path (Split-Path $PreferencePath -Parent) 'onboarding.json'}
     $preference=if($RenderOnly){[pscustomobject]@{Theme=$ThemeMode;Warning=$false}}else{Read-LGUiPreference $PreferencePath}
     $visualPreference=if($geometryEnabled){Read-LGAppearancePreference $AppearancePath}else{New-LGAppearancePreference}
     $ui=[pscustomobject]@{Window=$window;Controls=$controls;Child=$null;JobDirectory=$null;LastReport=$null;Initialized=$false;ForceFull=$true;LastFull=[DateTime]::MinValue;LastRefresh=[DateTime]::MinValue;LastSuccess=[DateTime]::MinValue;Stale=$false
         Runspace=$null;Pipeline=$null;Pending=$null;QueryStarted=[DateTime]::MinValue;QueryFull=$true;Closed=$false;QueuedCommand=$null;Entry=(Join-Path (Split-Path $PSScriptRoot -Parent) 'LowGear.ps1');LastDiagnostic=$null
         CurrentPage='Overview';Navigating=$false;Compact=$false;ProcessGroups=@();AffinityDirty=$false;SyncingAffinity=$false;ThemePreference=$preference.Theme;ThemeSyncing=$false;PreferenceWarning=$preference.Warning;PreferencePath=$PreferencePath;Appearance=$null;Native=$null;ApplyTheme=$null
         Demo=([bool]$Demo -or [bool]$RenderOnly);Rendering=[bool]$RenderOnly;ConfirmRestoreOverride=$null;LastCommand=$null;TickHandler=$null
-        VisualPreference=$visualPreference;AppearancePath=$AppearancePath;AppearanceSyncing=$false;GeometryEnabled=$geometryEnabled;GeometryInitialized=$false;ApplyingBounds=$false;GeometryEnvironmentOverride=$null;ClosePreference=$null;LastNonMinimized='Normal';PendingGeometryRepair=$false;LastPlacement=$null}
+        VisualPreference=$visualPreference;AppearancePath=$AppearancePath;AppearanceSyncing=$false;GeometryEnabled=$geometryEnabled;GeometryInitialized=$false;ApplyingBounds=$false;GeometryEnvironmentOverride=$null;ClosePreference=$null;LastNonMinimized='Normal';PendingGeometryRepair=$false;LastPlacement=$null
+        Setup=$null;OpenSetup=$null;LastPreflight=$null;PreflightRequested=$false;QueryKind='Status';QueuedConfirmed=$false;OnboardingPath=$OnboardingPath;StartupReadyPath=$StartupReadyPath;LastOperation=$null}
     $getDiagnostic=Get-Command Get-LGDiagnostic
     $navigate={param([string]$page)
         if($ui.Closed -or $ui.Navigating -or $page -notin @('Overview','Settings','Diagnostics')){return}
@@ -168,6 +172,7 @@ function Show-LGPanel {
     }.GetNewClosure()
     $update={param($report)
         $ui.LastReport=$report;$ui.Stale=$false;$ui.LastSuccess=[DateTime]::UtcNow
+        if($null -ne $ui.Setup -and -not $ui.Setup.Closed){& $ui.Setup.OnReport $report}
         $states=@{Ready='已启用';Running='已启用 · 本次执行中';Paused='已暂停';NotInstalled='尚未启用';RecoveryRequired='需要恢复检查';WorkerUnavailable='触发配置异常'}
         $ui.Controls.ManagerText.Text=if($states.ContainsKey([string]$report.Mode)){$states[$report.Mode]}else{'状态未知'}
         $ui.Controls.ManagerHint.Text=switch($report.Mode){Paused {'启动规则和原始备份保留'};NotInstalled {'首次启用后即可关闭窗口'};RecoveryRequired {'请前往诊断页检查原因'};WorkerUnavailable {'请检查任务与启动事件'};default {'每次启动自动执行一次'}}
@@ -226,16 +231,18 @@ function Show-LGPanel {
         if($ui.Closed -or $ui.Demo -or $null -ne $ui.Child -or $null -ne $ui.Pipeline){return}
         if($null -eq $ui.Runspace){$ui.Runspace=[RunspaceFactory]::CreateRunspace();$ui.Runspace.ApartmentState='STA';$ui.Runspace.ThreadOptions='ReuseThread';$ui.Runspace.Open()}
         $ui.QueryFull=$ui.ForceFull -or ([DateTime]::UtcNow-$ui.LastFull).TotalSeconds -ge 30;$ui.ForceFull=$false;$ui.QueryStarted=[DateTime]::UtcNow
+        $ui.QueryKind=if($ui.PreflightRequested){'Preflight'}else{'Status'};$ui.PreflightRequested=$false
         $ui.Pipeline=[PowerShell]::Create();$ui.Pipeline.Runspace=$ui.Runspace
-        [void]$ui.Pipeline.AddScript('param($entry,$full) if(-not(Get-Module LowGear)){Import-Module (Join-Path (Split-Path $entry -Parent) "src\LowGear.psm1") -DisableNameChecking};Get-LGStatus -Quick:(-not $full)|ConvertTo-Json -Depth 25').AddArgument($ui.Entry).AddArgument($ui.QueryFull)
+        [void]$ui.Pipeline.AddScript('param($entry,$full,$kind) if(-not(Get-Module LowGear)){Import-Module (Join-Path (Split-Path $entry -Parent) "src\LowGear.psm1") -DisableNameChecking};if($kind -eq "Preflight"){Invoke-LGCommand Preflight|ConvertTo-Json -Depth 25}else{Get-LGStatus -Quick:(-not $full)|ConvertTo-Json -Depth 25}').AddArgument($ui.Entry).AddArgument($ui.QueryFull).AddArgument($ui.QueryKind)
         $ui.Pending=$ui.Pipeline.BeginInvoke()
     }.GetNewClosure()
-    $start={param([string]$command)
+    $start={param([string]$command,[switch]$Confirmed)
         if($ui.Closed -or $null -ne $ui.Child -or $null -ne $ui.QueuedCommand){return}
         if($command -eq 'Diagnostics'){& $navigate 'Diagnostics';return}
         if($command -eq 'Status'){$ui.ForceFull=$true;if($ui.Demo){& $update $ui.LastReport}elseif($null -eq $ui.Pipeline){& $refresh};return}
-        if($ui.Demo){$ui.Controls.OperationText.Text='此窗口使用示例数据，不执行本机配置修改。';return}
-        if($null -ne $ui.Pipeline){$ui.QueuedCommand=$command;$ui.Controls.OperationText.Text='正在完成状态读取，随后执行所选操作…';& $setActions;return}
+        if($ui.Demo){$ui.Controls.OperationText.Text='此窗口使用示例数据，不执行本机配置修改。';if($Confirmed -and $null -ne $ui.Setup){& $ui.Setup.OnResult ([pscustomobject]@{Success=$false;Code='DEMO_NOT_APPLIED'})};return}
+        if($command -in @('Install','Upgrade','Restore') -and -not $Confirmed){& $ui.OpenSetup $command;return}
+        if($null -ne $ui.Pipeline){$ui.QueuedCommand=$command;$ui.QueuedConfirmed=[bool]$Confirmed;$ui.Controls.OperationText.Text='正在完成状态读取，随后执行所选操作…';& $setActions;return}
         $ui.JobDirectory=Join-Path ([IO.Path]::GetTempPath()) ('LowGear-ui-'+[Guid]::NewGuid().ToString('N'))
         [void][IO.Directory]::CreateDirectory($ui.JobDirectory)
         try{
@@ -248,6 +255,7 @@ function Show-LGPanel {
         }catch{
             $ui.Controls.OperationText.Text='无法启动操作，请检查本机权限。'
             try{[IO.Directory]::Delete($ui.JobDirectory,$false)}catch{};$ui.JobDirectory=$null
+            if($null -ne $ui.Setup -and -not $ui.Setup.Closed){& $ui.Setup.OnResult ([pscustomobject]@{Success=$false;Code='OPERATION_START_FAILED'})}
         }
         & $setActions
     }.GetNewClosure()
@@ -262,8 +270,28 @@ function Show-LGPanel {
         if($null -ne $ui.ConfirmRestoreOverride){$confirmed=& $ui.ConfirmRestoreOverride}else{$dialog=New-LGPanelDialog $ui 'Restore';$confirmed=$dialog.Window.ShowDialog() -eq $true}
         if($confirmed){& $start 'Restore'}
     }.GetNewClosure()
+    $ready={if($ui.StartupReadyPath){Write-LGStartupReady $ui.StartupReadyPath}}.GetNewClosure()
+    $requestPreflight={
+        if($ui.Demo){if($null -ne $ui.Setup){& $ui.Setup.OnPreflight ([pscustomobject]@{Success=$false;Detail=[pscustomobject]@{Checks=@([pscustomobject]@{Name='Demo';State='Warning';Message='示例窗口不会执行真实安装。'})};Report=$ui.LastReport})};return}
+        $ui.PreflightRequested=$true;$ui.ForceFull=$true
+        if($null -eq $ui.Pipeline -and $null -eq $ui.Child){& $refresh}
+    }.GetNewClosure()
+    $openSetup={param([string]$command='Install',[switch]$Initial,$Result=$null)
+        if($null -ne $ui.Setup -and -not $ui.Setup.Closed){return}
+        $setup=New-LGSetupWindow -Ui $ui -Start $start -RequestPreflight $requestPreflight -Navigate $navigate -OnboardingPath $ui.OnboardingPath -Initial:$Initial -Command $command
+        $ui.Setup=$setup
+        if($null -ne $Result){& $setup.OnResult $Result}
+        $setup.Window.Add_Loaded($ready)
+        [void]$setup.Window.ShowDialog()
+        $ui.Setup=$null
+        if($setup.Route -eq 'Diagnostics'){& $navigate 'Diagnostics'}
+        if($setup.Route -eq 'Exit' -and -not $Initial){$ui.Window.Close()}
+        if($Initial){return $setup.Route}
+    }.GetNewClosure();$ui.OpenSetup=$openSetup
     $tick={
         if($ui.Closed){return}
+        $completed=$null
+        if($null -ne $ui.Setup -and -not $ui.Setup.Closed){& $ui.Setup.Progress}
         if($null -ne $ui.Native -and $ui.Native.TakeChange()){& $applyTheme $ui.ThemePreference}
         if($null -ne $ui.Native -and $ui.Native.TakeLayoutChange()){$ui.PendingGeometryRepair=$true}
         if($ui.PendingGeometryRepair -and $ui.Window.WindowState -ne 'Minimized'){& $repairPlacement}
@@ -274,23 +302,30 @@ function Show-LGPanel {
                 $path=Join-Path $ui.JobDirectory 'result.json'
                 if(Test-Path -LiteralPath $path){
                     $result=Get-Content -LiteralPath $path -Raw -Encoding UTF8|ConvertFrom-Json
+                    if($ui.LastCommand -in @('Install','Upgrade','Restore')){$completed=$result;$ui.LastOperation=$result}
                     if($result.Success){if($ui.LastCommand -in @('Install','SetAffinity')){$ui.AffinityDirty=$false};& $update $result.Report;$nextStep=switch($ui.LastCommand){Pause {'恢复自动执行后，下次启动才会触发会话。'};Restore {'请正常重启已有目标程序，以使用原始启动设置。'};SetAffinity {'策略在下次 ACE 启动时生效；已有实例保持原相关性。'};default {'可刷新查看结果，或关闭窗口正常启动游戏。'}};$ui.Controls.OperationText.Text=$result.Message+' 下一步：'+$nextStep}
                     else{$ui.Controls.OperationText.Text=$result.Message}
-                }else{$ui.Controls.OperationText.Text='操作未返回结果，请查看诊断摘要。'}
-            }catch{$ui.Controls.OperationText.Text='操作结果无法读取，请刷新状态。'}finally{
+                }else{$ui.Controls.OperationText.Text='操作未返回结果，请查看诊断摘要。';$completed=[pscustomobject]@{Success=$false;Code='RESULT_MISSING'}}
+            }catch{$ui.Controls.OperationText.Text='操作结果无法读取，请刷新状态。';$completed=[pscustomobject]@{Success=$false;Code='RESULT_INVALID'}}finally{
                 $ui.Child.Dispose();$ui.Child=$null
                 try{foreach($name in @('result.json','progress.json')){$path=Join-Path $ui.JobDirectory $name;if([IO.File]::Exists($path)){[IO.File]::Delete($path)}};[IO.Directory]::Delete($ui.JobDirectory,$false)}catch{}
                 $ui.JobDirectory=$null;$ui.ForceFull=$true;& $setActions
             }
+            if($null -ne $completed -and $ui.LastCommand -in @('Install','Upgrade','Restore')){
+                if($null -ne $ui.Setup -and -not $ui.Setup.Closed){& $ui.Setup.OnResult $completed}else{& $ui.OpenSetup $ui.LastCommand -Result $completed}
+            }
         }
         if($null -ne $ui.Pipeline){
             if(-not $ui.Pending.IsCompleted){if(([DateTime]::UtcNow-$ui.QueryStarted).TotalSeconds -gt 10){& $markStale '系统查询较慢；当前显示上次结果，未重复发起查询。'};return}
-            try{$output=$ui.Pipeline.EndInvoke($ui.Pending);if($ui.Pipeline.HadErrors){throw 'Query failed'};$report=($output -join "`n")|ConvertFrom-Json;& $update $report;if($ui.QueryFull){$ui.LastFull=[DateTime]::UtcNow}}
-            catch{& $markStale '本次读取失败，保留上次结果；可手动刷新或查看诊断摘要。'}
+            try{$output=$ui.Pipeline.EndInvoke($ui.Pending);if($ui.Pipeline.HadErrors){throw 'Query failed'};$report=($output -join "`n")|ConvertFrom-Json
+                if($ui.QueryKind -eq 'Preflight'){$ui.LastPreflight=$report;if($null -ne $report.Report){& $update $report.Report}else{& $markStale '预检未完成，保留上次状态；请查看预检说明或诊断。'};if($null -ne $ui.Setup -and -not $ui.Setup.Closed){& $ui.Setup.OnPreflight $report}}else{& $update $report}
+                if($ui.QueryFull){$ui.LastFull=[DateTime]::UtcNow}}
+            catch{& $markStale '本次读取失败，保留上次结果；可手动刷新或查看诊断摘要。'
+                if($null -ne $ui.Setup -and -not $ui.Setup.Closed){if($ui.Setup.Step -eq 'Checking'){$ui.Setup.Route='Diagnostics';$ui.Setup.Window.Close()}elseif($ui.Setup.Step -eq 'Review'){& $ui.Setup.OnPreflight ([pscustomobject]@{Success=$false;Detail=[pscustomobject]@{Checks=@([pscustomobject]@{Name='Query';State='Error';Message='预检读取失败，请进入诊断或返回后重新检查。'})}})}}}
             finally{$ui.Pipeline.Dispose();$ui.Pipeline=$null;$ui.Pending=$null;$ui.LastRefresh=[DateTime]::UtcNow}
         }
-        if($null -ne $ui.QueuedCommand){$next=$ui.QueuedCommand;$ui.QueuedCommand=$null;& $start $next;return}
-        if($ui.ForceFull -or ([DateTime]::UtcNow-$ui.LastRefresh).TotalSeconds -ge 5){& $refresh}
+        if($null -ne $ui.QueuedCommand){$next=$ui.QueuedCommand;$confirmed=$ui.QueuedConfirmed;$ui.QueuedCommand=$null;$ui.QueuedConfirmed=$false;& $start $next -Confirmed:$confirmed;return}
+        if($ui.PreflightRequested -or $ui.ForceFull -or ([DateTime]::UtcNow-$ui.LastRefresh).TotalSeconds -ge 5){& $refresh}
     }.GetNewClosure()
     $closing={param($sender,$eventArgs)
         if($null -ne $ui.Child){$eventArgs.Cancel=$true;$ui.Controls.OperationText.Text='正在修改本机配置，请等待操作完成后关闭。'}
@@ -309,8 +344,8 @@ function Show-LGPanel {
         if($null -ne $pipeline -or $null -ne $runspace){[LowGear.UI.WindowEffects]::ReleaseQuery($pipeline,$runspace)}
     }.GetNewClosure()
     # Keep helpers private to callbacks, including when invoked from a nested script scope.
-    $helpers=@(foreach($name in @('Read-LGUiPreference','Write-LGUiPreference','Get-LGThemeEnvironment','Resolve-LGAppearance','Set-LGThemeResources','Get-LGUiValue','Get-LGPrimaryAction','Get-LGCpuLabel','Get-LGIoLabel','Get-LGAffinityLabel','Get-LGProcessGroups','Get-LGPanelArguments','New-LGPanelDialog','New-LGAppearancePreference','ConvertTo-LGPlacement','Read-LGAppearancePreference','Write-LGAppearancePreference','Get-LGPlacementEnvironment','Get-LGNormalBounds','Set-LGWindowPlacement')){Get-Command $name})
-    foreach($callback in @($navigate,$resize,$saveVisual,$placementEnvironment,$applyPlacement,$capturePlacement,$repairPlacement,$applyTheme,$resetAppearance,$setActions,$update,$markStale,$refresh,$start,$diagnostic,$restore,$tick,$closing,$cleanup)){
+    $helpers=@(foreach($name in @('Read-LGUiPreference','Write-LGUiPreference','Get-LGThemeEnvironment','Resolve-LGAppearance','Set-LGThemeResources','Get-LGUiValue','Get-LGPrimaryAction','Get-LGCpuLabel','Get-LGIoLabel','Get-LGAffinityLabel','Get-LGProcessGroups','Get-LGPanelArguments','New-LGPanelDialog','New-LGAppearancePreference','ConvertTo-LGPlacement','Read-LGAppearancePreference','Write-LGAppearancePreference','Get-LGPlacementEnvironment','Get-LGNormalBounds','Set-LGWindowPlacement','New-LGSetupWindow','Read-LGOnboarding','Set-LGOnboardingHandled','Get-LGSetupRoute','Get-LGOperationOutcome','Set-LGSetupBounds','Test-LGStartupPath','Write-LGStartupReady')){Get-Command $name})
+    foreach($callback in @($navigate,$resize,$saveVisual,$placementEnvironment,$applyPlacement,$capturePlacement,$repairPlacement,$applyTheme,$resetAppearance,$setActions,$update,$markStale,$refresh,$start,$diagnostic,$restore,$ready,$requestPreflight,$openSetup,$tick,$closing,$cleanup)){
         & $callback.Module {param($functions)foreach($function in $functions){Set-Item -Path ('Function:script:'+$function.Name) -Value $function.ScriptBlock}} $helpers
     }
     foreach($page in @('Overview','Settings','Diagnostics')){$controls[$page+'Nav'].Tag=$page;$controls[$page+'Nav'].Add_Checked({param($sender,$eventArgs)& $navigate ([string]$sender.Tag)}.GetNewClosure())}
@@ -328,10 +363,11 @@ function Show-LGPanel {
     $controls.RememberWindow.Add_Checked($rememberChanged);$controls.RememberWindow.Add_Unchecked($rememberChanged);$controls.ResetAppearanceButton.Add_Click($resetAppearance)
     $window.Add_SourceInitialized({$handle=[Windows.Interop.WindowInteropHelper]::new($ui.Window).Handle;$ui.Native=[LowGear.UI.WindowEffects]::new($handle);& $applyTheme $ui.ThemePreference;& $applyPlacement}.GetNewClosure())
     $window.Add_StateChanged({if($ui.Window.WindowState -ne 'Minimized'){$ui.LastNonMinimized=[string]$ui.Window.WindowState}}.GetNewClosure())
+    $window.Add_Loaded($ready)
     $window.Add_SizeChanged({param($sender,$eventArgs)& $resize $sender.ActualWidth}.GetNewClosure());$window.Add_Closing($closing);$window.Add_Closed($cleanup)
     & $applyTheme $ui.ThemePreference;& $navigate $PreviewPage;& $resize $RenderWidth;& $setActions
     if($ui.Demo){$window.Title='ACE LowGear · Fluent 预览 · 示例数据';$controls.PreviewBadge.Visibility='Visible';& $update (Get-LGDemoReport)}
-    if($PassThru){return [pscustomobject]@{State=$ui;Update=$update;Start=$start;Refresh=$refresh;Tick=$tick;Closing=$closing;Cleanup=$cleanup;Navigate=$navigate;Resize=$resize;Theme=$applyTheme;Restore=$restore;Actions=$setActions;ResetAppearance=$resetAppearance;RepairPlacement=$repairPlacement;CapturePlacement=$capturePlacement}}
+    if($PassThru){return [pscustomobject]@{State=$ui;Update=$update;Start=$start;Refresh=$refresh;Tick=$tick;Closing=$closing;Cleanup=$cleanup;Navigate=$navigate;Resize=$resize;Theme=$applyTheme;Restore=$restore;Actions=$setActions;ResetAppearance=$resetAppearance;RepairPlacement=$repairPlacement;CapturePlacement=$capturePlacement;OpenSetup=$openSetup;RequestPreflight=$requestPreflight}}
     if($RenderOnly){
         $window.Width=$RenderWidth;$window.Height=$RenderHeight
         $visual=$window.Content;$visual.Measure([Windows.Size]::new($RenderWidth,$RenderHeight));$visual.Arrange([Windows.Rect]::new(0,0,$RenderWidth,$RenderHeight));$visual.UpdateLayout()
@@ -339,5 +375,7 @@ function Show-LGPanel {
         $background=[Windows.Media.DrawingVisual]::new();$drawing=$background.RenderOpen();try{$drawing.DrawRectangle($window.Resources['CanvasBrush'],$null,[Windows.Rect]::new(0,0,$RenderWidth,$RenderHeight))}finally{$drawing.Close()}
         $bitmap.Render($background);$bitmap.Render($visual);$encoder=[Windows.Media.Imaging.PngBitmapEncoder]::new();$encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap));$stream=[IO.File]::Create($ImagePath);try{$encoder.Save($stream)}finally{$stream.Dispose()};$window.Close();& $cleanup;return
     }
-    $timer.Start();[void]$window.ShowDialog()
+    $timer.Start()
+    if(-not $ui.Demo){$route=& $openSetup 'Install' -Initial;if($route -eq 'Exit'){$window.Close();& $cleanup;return}}
+    [void]$window.ShowDialog()
 }

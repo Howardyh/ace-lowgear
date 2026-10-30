@@ -21,4 +21,6 @@ $script:EventQuery = "SELECT * FROM Win32_ProcessStartTrace WHERE ProcessName='S
 . (Join-Path $PSScriptRoot 'Platform.ps1')
 . (Join-Path $PSScriptRoot 'Health.ps1')
 . (Join-Path $PSScriptRoot 'Controller.ps1')
+. (Join-Path $script:Project 'Bootstrap.ps1')
+. (Join-Path $PSScriptRoot 'Preflight.ps1')
 Export-ModuleMember -Function Invoke-LGCommand, Get-LGStatus, Get-LGSummary, Get-LGDiagnostic, Initialize-LGNative, Build-LGRuntime

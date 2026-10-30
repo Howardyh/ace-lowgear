@@ -140,7 +140,7 @@ try{
     Assert ([object]::ReferenceEquals($pipeline,$handle.State.Pipeline)) 'Refresh and page changes share the same in-flight query'
     $handle.State.QueryStarted=[DateTime]::UtcNow.AddSeconds(-11);& $handle.Tick
     Assert ($handle.State.Stale -and $handle.State.Controls.ReadTimestampText.Text -match '数据可能过期') 'Slow reads retain old data and visibly mark its age'
-    & $handle.Start 'Install';& $handle.Start 'Resume'
+    & $handle.Start 'Install' -Confirmed;& $handle.Start 'Resume'
     Assert ($handle.State.QueuedCommand -eq 'Install' -and $null -eq $handle.State.JobDirectory) 'Only the first mutation queues behind an ongoing read'
     $closingArgs=[ComponentModel.CancelEventArgs]::new();& $handle.Closing $null $closingArgs
     Assert (-not $closingArgs.Cancel -and $null -eq $handle.State.QueuedCommand) 'Closing before mutation begins cancels queued work rather than trapping a slow-query window'
