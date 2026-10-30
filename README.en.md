@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.3.0 prerelease:** Mica control, window memory and safe placement recovery, retaining the Fluent panel and apply-on-startup, verify and exit. [Try 1.3](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) · [Stable 1.2](https://github.com/Howardyh/ace-lowgear/releases/latest)
+> **1.3.0 stable:** Mica control, window memory and safe placement recovery, retaining the Fluent panel and apply-on-startup, verify and exit. [Download latest](https://github.com/Howardyh/ace-lowgear/releases/latest) · [Previous 1.2](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0)
 
 **Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
 
@@ -21,7 +21,7 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 
 ## 🚀 Quick start
 
-1. Choose the [1.3 appearance prerelease](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) or [stable 1.2](https://github.com/Howardyh/ace-lowgear/releases/latest), download its `ace-lowgear-<version>-source.zip` from **Assets**, then extract it in full. Keep all included files together.
+1. Download `ace-lowgear-1.3.0-source.zip` from the **Assets** of [stable 1.3](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0), then extract it in full. Keep all included files together. [Previous 1.2](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0) remains available.
 2. Double-click **`Start.cmd`**, accept the Windows administrator prompt, and open the control panel.
 3. Click **启用自动管理** (Enable automatic management). After it finishes, close the panel and launch your game normally.
 
@@ -31,7 +31,7 @@ The installer checks startup priority behavior, saves the original settings and 
 
 On first use, launch your game, wait about 45 seconds, then open the panel and click **刷新状态** (Refresh). Running targets should show CPU **低**, I/O **非常低**, and **已核验** (Verified).
 
-## 🪟 Appearance and placement in 1.3 (prerelease)
+## 🪟 Appearance and placement in 1.3
 
 Open **设置 → 外观** (Settings → Appearance):
 
@@ -42,7 +42,7 @@ Open **设置 → 外观** (Settings → Appearance):
 
 The existing theme-only `ui.json` is unchanged. Its sibling `appearance.json` stores material and placement only; malformed geometry resets independently. No display identifiers are collected, and geometry is excluded from diagnostics and source packages. Closing releases display-change hooks.
 
-Version 1.3 is a source-only prerelease with 248 local checks passed; 1.2 remains stable. Opening the new panel does not automatically upgrade the installed worker. Existing installations can use **升级本机组件**, retaining enabled/paused state, policy and the earliest backup. Physical display unplugging is not yet accepted; native window checks and simulated display layouts are reported separately in [verification](docs/验证.md).
+Version 1.3 is stable after user interface acceptance, 248 local checks and a verified local 1.2 → 1.3 upgrade. Opening the new panel does not automatically upgrade the installed worker. Existing installations can use **升级本机组件**, retaining enabled/paused state, policy and the earliest backup. Physical display unplugging is not yet accepted; native window checks and simulated display layouts are reported separately in [verification](docs/验证.md). The tested tag and source archive are unchanged; their prerelease-era notes remain historical. This page and the release page describe the current release status.
 
 ## 🆕 Fluent panel in 1.2
 

@@ -1,6 +1,6 @@
 # 🪶 ACE LowGear
 
-> **1.3.0 预发布**：新增云母开关、窗口记忆与安全位置恢复，保留 Fluent 三页控制中心及“启动时设置，核验后退出”。[试用 1.3](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) · [稳定版 1.2](https://github.com/Howardyh/ace-lowgear/releases/latest)
+> **1.3.0 正式版**：新增云母开关、窗口记忆与安全位置恢复，保留 Fluent 三页控制中心及“启动时设置，核验后退出”。[下载最新版](https://github.com/Howardyh/ace-lowgear/releases/latest) · [1.2 历史版本](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0)
 
 **每次 ACE 启动，自动降低 CPU / I/O 优先级，核验后退出。**
 
@@ -23,7 +23,7 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 
 ## 🚀 三步开始
 
-1. 选择 [1.3 外观预发布](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) 或 [1.2 稳定版](https://github.com/Howardyh/ace-lowgear/releases/latest)，在 **Assets** 下载对应的 `ace-lowgear-<版本>-source.zip`，**完整解压**到普通文件夹。不要直接在压缩包里运行，也不要只复制单个启动文件。
+1. 到 [1.3 正式版](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.3.0) 的 **Assets** 下载 `ace-lowgear-1.3.0-source.zip`，**完整解压**到普通文件夹。不要直接在压缩包里运行，也不要只复制单个启动文件。[1.2 历史版本](https://github.com/Howardyh/ace-lowgear/releases/tag/v1.2.0) 继续保留。
 2. 双击 **`Start.cmd`**，允许 Windows 管理员提示，打开中文控制中心。
 3. 点击 **“启用自动管理”**，等待完成。之后可以关闭面板，正常启动游戏。
 
@@ -33,7 +33,7 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 
 首次使用时，建议启动游戏并等待约 45 秒，再打开面板点击 **“刷新状态”**，确认运行实例的 CPU 为“低”、I/O 为“非常低”，结果为“已核验”。
 
-## 🪟 1.3 外观与窗口控制（预发布）
+## 🪟 1.3 外观与窗口控制
 
 在“设置 → 外观”中调整，立即生效，无需改动自动执行配置：
 
@@ -44,7 +44,7 @@ ACE LowGear 是一个用于 Windows 的 ACE 进程调度工具，带有中文控
 
 主题仍只保存在原来的 `ui.json`；材质和窗口记忆单独保存在同目录的 `appearance.json`。旧版主题文件保持兼容，外观文件损坏不会影响调度、诊断或最早原始备份。位置记忆和显示器几何不会进入诊断摘要与源码包。关闭后不保留显示器监听。
 
-1.3 以预发布源码包提供，248 项本地检查通过；1.2 继续保留为稳定版。打开新版面板不会自动升级本机执行组件；已有安装可在确认后点击“升级本机组件”，保留启用/暂停状态、策略和最早备份。实际多显示器拔插尚未验收，原生窗口测试与显示器几何模拟分别记录，见[验证说明](docs/验证.md)。
+1.3 已通过界面用户验收、248 项本地检查及单机 1.2 → 1.3 无损升级核验，作为正式版提供。打开新版面板不会自动升级本机执行组件；已有安装点击“升级本机组件”，保留启用/暂停状态、策略和最早备份。实际多显示器拔插尚未验收，原生窗口测试与显示器几何模拟分别记录，见[验证说明](docs/验证.md)。正式版沿用同一已测试标签与源码包，归档内预发布时期的说明作为历史记录保留，当前发布状态以本页和发布页为准。
 
 ## 🆕 1.2 Fluent 界面
 
