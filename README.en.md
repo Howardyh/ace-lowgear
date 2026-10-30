@@ -1,16 +1,65 @@
 # 🪶 ACE LowGear
 
-> **1.4.0:** independent first-install wizard, visible startup failures, read-only preflight and operation results. Retains the Fluent panel and apply-on-startup, verify and exit. Release status and additional machine acceptance are recorded on [Releases](https://github.com/Howardyh/ace-lowgear/releases).
+Lower ACE CPU / I/O priorities after each startup, verify, then exit. [简体中文](README.md)
 
-**Lower ACE CPU / I/O priorities after each startup, verify, then exit.**
+## 🚀 Install: start here
+
+**Use 64-bit Windows 10/11 and allow the administrator prompt. No commands, programming, Python, Node.js or .NET SDK installation are needed.**
+
+### 1. Download the recommended ZIP
+
+**[⬇️ Download ACE LowGear 1.4.0 source package](https://github.com/Howardyh/ace-lowgear/releases/download/v1.4.0/ace-lowgear-1.4.0-source.zip)**
+
+The source package includes a ready-to-use launcher and compiles the worker automatically. You do not compile it yourself. On the [latest release page](https://github.com/Howardyh/ace-lowgear/releases/latest), expand **Assets** and select `ace-lowgear-<version>-source.zip`. The `.sha256` is a checksum, not a program. GitHub's automatic Source code archives are repository snapshots; use the recommended package for these steps.
+
+### 2. Extract every file
+
+Right-click the downloaded ZIP, choose **Extract All**, and open the extracted folder, then its **ace-lowgear** subfolder. You should see **开始使用.cmd**, **Start.cmd**, **LowGear.ps1**, **src** and **ui** together. Run from that extracted folder, keep all files together, and avoid running inside the ZIP viewer or copying only a launcher.
+
+### 3. Open the launcher
+
+Double-click **开始使用.cmd** or **Start.cmd** and choose **Yes** at the Windows administrator prompt. File extensions may be hidden; select the command script, while **开始使用.txt** is the short manual. If you cancelled authorization, open the launcher again when ready.
+
+### 4. Follow the first-install wizard
+
+1. Keep the default affinity choice on first use, then click **下一步：检查** (Next: Check).
+2. Wait for preflight. If there are no blocking issues, click **确认并启用** (Confirm and enable). Otherwise follow the explanation or open Diagnostics.
+3. Wait for completion before closing or clicking again.
+4. **配置已完成** means automatic execution is configured. **等待游戏启动** means no game target is running yet; continue below.
+
+Choosing **先查看面板** (View panel first) remembers deferral. To install later, open **概览 → 启用自动管理**. Existing installations enter the panel directly; follow the upgrade steps below when offered.
+
+### 5. Launch the game and check the result
+
+Launch your game normally, wait about **45 seconds**, reopen the panel and click **刷新** (Refresh) in Overview. If the game was already running before installation, exit and restart it normally. Automation should show **已启用**; running targets should show CPU **低**, I/O **非常低**, and **已核验**. A target marked **未运行 · 等待启动** is absent and has not been verified; all three targets need not run together. For unknown readings or configuration errors, open Diagnostics.
+
+**After enabling, close the panel and launch games as usual. Rebooting requires no repeat installation or manual tool launch.** Resume automation first if you paused it yourself.
+
+## ♻️ Upgrade an existing installation
+
+Extract the new package into a **new folder**, retaining the old source and recovery data. Open the new launcher, choose **升级本机组件**, review the versions and select **确认升级**. Wait for the result, then use the new entry point. Original backups, affinity and enabled/paused state are retained; paused installations stay paused. No repeat upgrade is needed for the same installed version. For 0.1.x, read the migration section below first.
+
+## ❓ Common installation questions
+
+| Situation | Next step |
+|---|---|
+| Missing files | Extract the complete ZIP and find the folder containing src and ui |
+| No panel appears | Open Start.cmd to read the startup message and complete authorization |
+| Notepad opens | Check that you selected the .cmd launcher rather than 开始使用.txt |
+| No first-install wizard | Use Enable in Overview if uninstalled, or Upgrade for an older installed component |
+| Configured, but no targets | Launch the game, wait and refresh; configuration is separate from live verification |
+| Temporarily stop automation | Choose 暂停自动执行 in Settings, then resume when needed |
+| Undo the tool's changes | Confirm 完整恢复原设置 in Settings; deleting the downloaded folder does not restore system settings |
+
+For help, preview the diagnostic summary and [open an issue](https://github.com/Howardyh/ace-lowgear/issues). Do not share original backups or personal paths.
+
+## 🪶 Features and details
 
 [![Verify source](https://github.com/Howardyh/ace-lowgear/actions/workflows/verify.yml/badge.svg)](https://github.com/Howardyh/ace-lowgear/actions/workflows/verify.yml)
 [![Release](https://img.shields.io/github/v/release/Howardyh/ace-lowgear)](https://github.com/Howardyh/ace-lowgear/releases/latest)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[简体中文](README.md) · [Download](https://github.com/Howardyh/ace-lowgear/releases/latest)
-
-ACE LowGear is a Windows process scheduling tool with a Chinese control panel. Enable it once, then launch your game as usual. It applies low priorities when ACE starts, reads them back, and exits. **The panel can stay closed; no resident correction process is required.** Independent of ACE and not affiliated with its publisher.
+ACE LowGear is a Windows scheduling tool with a Chinese panel. It applies priorities, reads them back and exits after each startup. The panel can stay closed; no resident correction process is required. It is independent of ACE and not affiliated with its publisher.
 
 | Setting | Target |
 |---|---|
@@ -18,18 +67,6 @@ ACE LowGear is a Windows process scheduling tool with a Chinese control panel. E
 | I/O priority | Very Low |
 | CPU affinity | Unchanged by default; optional last logical CPU |
 | Images | `SGuard64.exe`, `SGuardSvc64.exe`, `ACE-Service64.exe` |
-
-## 🚀 Quick start
-
-1. Extract the complete source package. For online downloads, choose the recommended `ace-lowgear-<version>-source.zip` under **Assets** on [Releases](https://github.com/Howardyh/ace-lowgear/releases). The `.sha256` is a checksum, not an application; GitHub's automatic Source code downloads are repository snapshots.
-2. Double-click **开始使用.cmd** or **Start.cmd**, accept the administrator prompt, and open the first-install wizard.
-3. Review the policy and checks, then choose **确认并启用**. The result explains the configuration and next step. You can also choose **先查看面板** to defer; this is remembered, with manual access from Overview later.
-
-The installer checks startup priority behavior, saves the original settings and registers automatic execution. The executable is compiled locally from the included source. No Python, Node.js or .NET SDK installation is required.
-
-**After reboot:** no repeat installation or manual launch is needed. Each ACE startup triggers a new session. If you previously paused automation, use **恢复自动执行** to resume.
-
-On first use, launch your game, wait about 45 seconds, then open the panel and click **刷新状态** (Refresh). Running targets should show CPU **低**, I/O **非常低**, and **已核验** (Verified).
 
 ## 📦 Installation and delivery in 1.4
 
